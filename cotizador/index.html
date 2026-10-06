@@ -166,11 +166,13 @@
     <div class="card">
       <h2>Importar listas de proveedores</h2>
       <p class="muted">Excel o CSV con columnas como: <b>Código, Descripción, Categoría (área), Proveedor, Unidad, Marca, Costo, IVA, Sinónimos</b>.
-        Los nombres de columna se reconocen aunque varíen (p. ej. "Ref", "Producto", "Precio costo", "Línea").</p>
+        Los nombres de columna se reconocen aunque varíen (p. ej. "Ref", "Insumo", "Valor unitario", "Precio distribuidor", "Línea").
+        Se leen todas las hojas; los títulos de sección dentro de una hoja se usan como categoría. Si no hay código, se genera uno.</p>
       <div class="form-grid cols-3">
         <label>Archivo <input id="cat-file" type="file" accept=".xlsx,.xls,.csv,.ods"></label>
         <label>Proveedor (si el archivo no lo trae) <input id="cat-prov" placeholder="Opcional"></label>
-        <label>Categoría (si el archivo no la trae) <input id="cat-cat" placeholder="Opcional"></label>
+        <label>Categoría (si el archivo no la trae) <input id="cat-cat" placeholder="Opcional: por defecto, la hoja o sección"></label>
+        <label>IVA % (si el archivo no lo trae) <input id="cat-iva" type="number" min="0" max="100" placeholder="Por defecto el de Configuración"></label>
         <label>Modo
           <select id="cat-mode">
             <option value="merge">Actualizar existentes y agregar nuevos (por código)</option>
@@ -328,6 +330,7 @@
 
 <script src="js/matcher.js"></script>
 <script src="js/parsers.js"></script>
+<script src="js/catalog.js"></script>
 <script src="js/demo-data.js"></script>
 <script src="js/store.js"></script>
 <script src="js/ai.js"></script>

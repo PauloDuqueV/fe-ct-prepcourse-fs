@@ -36,24 +36,6 @@
   function debounce(fn, ms) { var t; return function () { var a = arguments; clearTimeout(t); t = setTimeout(function () { fn.apply(null, a); }, ms); }; }
   function sameName(a, b) { return Matcher.normalize(a) === Matcher.normalize(b); }
 
-  function parseMoney(v) {
-    if (typeof v === 'number') return v;
-    var s = String(v == null ? '' : v).replace(/[^0-9.,-]/g, '');
-    if (!s) return 0;
-    var lastDot = s.lastIndexOf('.'), lastComma = s.lastIndexOf(',');
-    if (lastDot >= 0 && lastComma >= 0) {
-      var dec = lastDot > lastComma ? '.' : ',';
-      s = s.split(dec === '.' ? ',' : '.').join('');
-      s = s.replace(dec, '.');
-    } else if (lastComma >= 0) {
-      s = /,\d{3}$/.test(s) && s.split(',').length > 1 && !/,\d{1,2}$/.test(s) ? s.replace(/,/g, '') : s.replace(',', '.');
-    } else if (lastDot >= 0 && /\.\d{3}$/.test(s) && (s.split('.').length > 2 || s.length > 5)) {
-      s = s.replace(/\./g, '');
-    }
-    var n = parseFloat(s);
-    return isNaN(n) ? 0 : n;
-  }
-
   // ---------- catálogo e índices ----------
   function reindex() {
     index = Matcher.buildIndex(products);
@@ -598,79 +580,30 @@
   }
 
   // ---------- catálogo ----------
-  var CAT_COLS = {
-    codigo: /^(c[oó]d(igo)?|ref(erencia)?|sku|item code|cod\.?)$/i,
-    descripcion: /^(descripci[oó]n|producto|nombre|art[ií]culo|detalle|item|[ií]tem|nombre del producto)/i,
-    categoria: /^(categor[ií]a|[aá]rea|l[ií]nea|grupo|familia|tipo|secci[oó]n)/i,
-    proveedor: /^(proveedor|fabricante|laboratorio|distribuidor)/i,
-    unidad: /^(unidad|presentaci[oó]n|empaque|u\/m|um|medida|embalaje)/i,
-    marca: /^(marca)/i,
-    costo: /^(costo|precio( de)? costo|valor( unitario)?|precio( unitario)?|costo unitario|precio compra|vr\.? unit)/i,
-    iva: /^(iva|% ?iva|impuesto)/i,
-    sinonimos: /^(sin[oó]nimos?|alias|otros nombres|palabras clave)/i
-  };
-
   async function importCatalog() {
     var f = $('#cat-file').files[0];
     if (!f) { toast('Seleccione un archivo de Excel o CSV.', true); return; }
     var wb = XLSX.read(await Parsers.readAsArrayBuffer(f), { type: 'array' });
-    var provOverride = $('#cat-prov').value.trim(), catOverride = $('#cat-cat').value.trim();
-    var incoming = [];
+    var ivaTxt = $('#cat-iva').value.trim();
+    var opts = { proveedor: $('#cat-prov').value.trim(), categoria: $('#cat-cat').value.trim(),
+      ivaDefault: ivaTxt === '' ? settings.ivaDefault : Number(ivaTxt) };
+    var incoming = [], resumen = [];
     wb.SheetNames.forEach(function (sn) {
       var rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, raw: true, defval: '' });
-      var hIdx = -1, map = null;
-      for (var i = 0; i < Math.min(rows.length, 30); i++) {
-        var m = {};
-        rows[i].forEach(function (cell, j) {
-          var v = String(cell).trim();
-          Object.keys(CAT_COLS).forEach(function (k) { if (m[k] == null && CAT_COLS[k].test(v)) m[k] = j; });
-        });
-        if (m.descripcion != null && (m.costo != null || m.codigo != null)) { hIdx = i; map = m; break; }
-      }
-      if (!map) return;
-      rows.slice(hIdx + 1).forEach(function (r, k) {
-        var desc = String(r[map.descripcion] || '').trim();
-        if (!desc) return;
-        var p = {
-          codigo: String(map.codigo != null ? r[map.codigo] : '').trim(),
-          descripcion: desc,
-          categoria: catOverride || String(map.categoria != null ? r[map.categoria] : '').trim() || sn,
-          proveedor: provOverride || String(map.proveedor != null ? r[map.proveedor] : '').trim(),
-          unidad: String(map.unidad != null ? r[map.unidad] : '').trim(),
-          marca: String(map.marca != null ? r[map.marca] : '').trim(),
-          costo: map.costo != null ? parseMoney(r[map.costo]) : 0,
-          iva: settings.ivaDefault,
-          sinonimos: String(map.sinonimos != null ? r[map.sinonimos] : '').trim()
-        };
-        if (map.iva != null && r[map.iva] !== '') {
-          var iv = parseMoney(r[map.iva]);
-          p.iva = iv > 0 && iv < 1 ? Math.round(iv * 100) : iv;
-        }
-        if (!p.codigo) p.codigo = (Matcher.normalize(p.proveedor || 'P').slice(0, 3).toUpperCase() || 'P') + '-' + String(products.length + incoming.length + 1).padStart(5, '0');
-        incoming.push(p);
-      });
+      var ps = Catalog.parseSheet(rows, Object.assign({ hoja: sn }, opts));
+      if (ps.length) resumen.push(sn + ': ' + ps.length);
+      incoming = incoming.concat(ps);
     });
     if (!incoming.length) {
-      $('#cat-msg').textContent = 'No se encontraron columnas reconocibles. La fila de encabezados debe incluir al menos "Descripción" y "Código" o "Costo". Use la plantilla.';
+      $('#cat-msg').textContent = 'No se encontraron columnas reconocibles. La fila de encabezados debe incluir al menos "Descripción" (o "Insumo") y "Código" o "Costo". Use la plantilla.';
       return;
     }
-    var mode = $('#cat-mode').value, added = 0, updated = 0;
-    if (mode === 'replace') products = [];
-    if (mode === 'replace-prov') {
-      var provs = new Set(incoming.map(function (p) { return p.proveedor; }));
-      products = products.filter(function (p) { return !provs.has(p.proveedor); });
-    }
-    var byCode = new Map(products.map(function (p, i) { return [String(p.codigo).toUpperCase(), i]; }));
-    incoming.forEach(function (p) {
-      var k = String(p.codigo).toUpperCase();
-      if (byCode.has(k)) {
-        var old = products[byCode.get(k)];
-        if (!p.sinonimos) p.sinonimos = old.sinonimos;
-        products[byCode.get(k)] = p; updated++;
-      } else { byCode.set(k, products.length); products.push(p); added++; }
-    });
+    var r = Catalog.merge(products, incoming, $('#cat-mode').value);
+    products = r.products;
     saveProducts();
-    $('#cat-msg').textContent = 'Importación lista: ' + added + ' nuevos, ' + updated + ' actualizados. Total en catálogo: ' + products.length + '.';
+    var sinCosto = incoming.filter(function (p) { return !(p.costo > 0); }).length;
+    $('#cat-msg').textContent = 'Importación lista (' + resumen.join(' · ') + '): ' + r.added + ' nuevos, ' + r.updated +
+      ' actualizados. Total en catálogo: ' + products.length + '.' + (sinCosto ? ' Atención: ' + sinCosto + ' productos sin costo.' : '');
     $('#cat-file').value = '';
   }
 

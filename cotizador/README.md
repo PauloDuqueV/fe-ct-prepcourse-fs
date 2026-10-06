@@ -39,6 +39,8 @@ El nombre del cliente es obligatorio y aparece en el Excel y en el PDF.
    | IVA | % IVA |
    | Sinónimos | Palabras clave |
 
+   Se leen todas las hojas del archivo. Si una hoja tiene varias tablas con títulos de sección (por ejemplo "SEROLOGÍA" o "LÁTEX"), cada título se usa como categoría. Si el producto no tiene código, se genera uno estable (por ejemplo `IPR-0017`) y, al volver a importar la lista, el producto se reconoce por su descripción. El IVA puede venir como 0,19 o como 19 %; si el archivo no lo trae, se usa el que indique al importar.
+
    Los modos de importación son: actualizar o agregar por código, reemplazar solo los productos de un proveedor, o reemplazar todo. El botón *Descargar plantilla* entrega el formato. En **Sinónimos** puede escribir cómo suelen pedir el producto los clientes (por ejemplo "tubo morado hemograma"), y eso mejora mucho la homologación.
 4. **Clientes:** defina el factor general y los factores por categoría de cada cliente. Los clientes nuevos se crean solos al guardar una cotización.
 5. **Cotizar:**
@@ -70,7 +72,8 @@ Todo se guarda en el almacenamiento local del navegador: catálogo, clientes, co
 ```
 index.html          interfaz
 css/styles.css      estilos
-js/matcher.js       homologación (normalización, sinónimos, puntaje)
+js/matcher.js       homologación (normalización, vocabulario de laboratorio, puntaje)
+js/catalog.js       importación de listas de proveedores
 js/parsers.js       lectura de texto/WhatsApp, Excel, Word, PDF y OCR de imágenes
 js/exporters.js     cálculo de precios, Excel con fórmulas y PDF
 js/ai.js            lectura opcional con Claude
@@ -78,4 +81,5 @@ js/store.js         almacenamiento local
 js/app.js           lógica de la interfaz
 vendor/             SDK de Anthropic empaquetado para el navegador
 ejemplos/           archivos de prueba
+tests/              pruebas automáticas (npx jest cotizador/tests)
 ```

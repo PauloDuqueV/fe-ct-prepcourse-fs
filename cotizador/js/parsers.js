@@ -48,7 +48,15 @@
   }
 
   function parseText(text) {
-    return String(text || '').split(/\r?\n|;(?=\s*\d)/).map(parseLine).filter(Boolean);
+    var lines = [];
+    String(text || '').split(/\r?\n|;(?=\s*\d)/).forEach(function (l) {
+      // "1 TGO y 1 TGP" / "2 VIH, 3 sifilis": varias cantidades en la misma línea
+      var body = l.replace(reWhatsappPrefix, '').replace(reBullet, '');
+      if (/^\s*\d/.test(body) && /\s+y\s+\d+\s+[a-z]{2,}|,\s*\d+\s+[a-z]{2,}\s+[a-z]/i.test(body)) {
+        body.split(/\s+y\s+(?=\d+\s+[a-z]{2,})|,\s*(?=\d+\s+[a-z]{2,}\s+[a-z])/i).forEach(function (x) { lines.push(x); });
+      } else lines.push(l);
+    });
+    return lines.map(parseLine).filter(Boolean);
   }
 
   var HEADER_DESC = /^(descripci[oó]n|producto|productos|art[ií]culo|nombre|detalle|insumo|elemento|material|concepto)\b/i;

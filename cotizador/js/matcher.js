@@ -34,18 +34,52 @@
     lila: 'lila', morada: 'lila', morado: 'lila', edta: 'edta',
     roja: 'roja', rojo: 'roja', amarilla: 'amarilla', amarillo: 'amarilla', gris: 'gris', azul: 'azul', verde: 'verde',
     coprologico: 'coprologico', coprologicos: 'coprologico', copro: 'coprologico', heces: 'coprologico',
-    parcial: 'parcial', citoquimico: 'citoquimico', citoquimicos: 'citoquimico', uroanalisis: 'citoquimico', orina: 'orina'
+    parcial: 'parcial', citoquimico: 'citoquimico', citoquimicos: 'citoquimico', orina: 'orina',
+    // Vocabulario de laboratorio clínico (español / inglés / siglas)
+    hiv: 'vih', syphilis: 'sifilis', sifilis: 'sifilis', vdrl: 'sifilis',
+    tgo: 'ast', got: 'ast', ast: 'ast', tgp: 'alt', gpt: 'alt', alt: 'alt',
+    crp: 'pcr', pcr: 'pcr', rf: 'fr', fr: 'fr', aso: 'aso',
+    alp: 'fosfatasa', fosfatasa: 'fosfatasa', hba1c: 'glicosilada', glicosilada: 'glicosilada', a1c: 'glicosilada',
+    ferritin: 'ferritina', albumin: 'albumina', calcium: 'calcio', glucose: 'glucosa', protein: 'proteina', proteinas: 'proteina',
+    triglyceride: 'triglicerido', triglycerides: 'triglicerido', trigliceridos: 'triglicerido', trigliceride: 'triglicerido',
+    magnesium: 'magnesio', iron: 'hierro', phosphorus: 'fosforo', bilirubina: 'bilirrubina', bilirrubinas: 'bilirrubina',
+    toxo: 'toxoplasma', toxoplasmosis: 'toxoplasma', hbsag: 'hepatitis', hcv: 'hepatitis',
+    tapabocas: 'mascarilla', cubrebocas: 'mascarilla', mascarillas: 'mascarilla', mascara: 'mascarilla',
+    portaobjeto: 'portaobjeto', portaobjetos: 'portaobjeto', cubreobjeto: 'cubreobjeto', cubreobjetos: 'cubreobjeto', laminilla: 'lamina', laminillas: 'lamina', laminas: 'lamina',
+    multidrug: 'multidroga', multidrogas: 'multidroga', drogas: 'multidroga', 'multi': 'multi',
+    cassete: 'cassette', casete: 'cassette', cassettes: 'cassette',
+    pbs: 'prueba', tirillas: 'tira', tirilla: 'tira', uroanalisis: 'uroanalisis',
+    bajalengua: 'bajalenguas', depresor: 'bajalenguas', depresores: 'bajalenguas',
+    galon: 'galon', galones: 'galon', isopropilico: 'isopropilico', violeta: 'violeta', genciana: 'violeta',
+    puntas: 'punta', puntillas: 'punta', tips: 'punta', microtubo: 'eppendorf', eppendorf: 'eppendorf',
+    guardian: 'guardian', guardianes: 'guardian', corto: 'guardian', cortopunzante: 'guardian',
+    hcg: 'embarazo', embarazo: 'embarazo', bun: 'urea', hexoquinasa: 'hk', hexokinasa: 'hk',
+    cocaina: 'coc', marihuana: 'thc', cannabis: 'thc', anfetamina: 'amp', anfetaminas: 'amp', benzodiacepina: 'bzo', benzodiacepinas: 'bzo',
+    morfina: 'mop', metanfetamina: 'met', metadona: 'mtd', extasis: 'mdma', opiaceos: 'opi', opiaceo: 'opi', barbituricos: 'bar'
   };
+
+  var QUALIFIERS = ['calibrador', 'multicalibrador', 'control', 'duo', 'ns1'];
+
+  // Frases de varias palabras que equivalen a un solo término
+  var PHRASES = [
+    [/\bfactor(es)? reumatoide[oa]?s?\b/g, 'fr'], [/\bporta ?objetos?\b/g, 'portaobjeto'], [/\bcubre ?objetos?\b/g, 'cubreobjeto'],
+    [/\bproteina c reactiva\b/g, 'pcr'], [/\bnitrogeno ureico\b/g, 'urea'], [/\bacido urico\b/g, 'acidourico'],
+    [/\bsangre oculta\b/g, 'sangreoculta'], [/\bguardian(es)?\b/g, 'guardian'], [/\b(cj|caja|cajas)x\s?(\d)/g, 'caja x $2'],
+    [/\bx(\d)/g, 'x $1']
+  ];
 
   function stripAccents(s) {
     return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '');
   }
 
   function normalize(s) {
-    return stripAccents(s).toLowerCase()
+    var t = stripAccents(s).toLowerCase();
+    PHRASES.forEach(function (p) { t = t.replace(p[0], p[1]); });
+    return t
       .replace(/(\d),(\d)/g, '$1.$2')          // 7,5 -> 7.5
       .replace(/(\d)\s*(ml|cc|mm|cm|g|gr|mg|l|lt|ul|µl)\b/g, '$1 $2')
       .replace(/(\d)x(\d)/g, '$1 x $2')        // 13x75 -> 13 x 75
+      .replace(/([a-z])\/(?=[a-z])/g, '$1 ')     // coc/amp/thc -> coc amp thc
       .replace(/[^a-z0-9.%/ ]+/g, ' ')
       .replace(/\s\.|\.\s|\.$|^\./g, ' ')
       .replace(/\s+/g, ' ')
@@ -202,9 +236,13 @@
           }
         }
 
+        // Controles, calibradores y kits "duo" son productos distintos al reactivo: solo si se piden
+
         var gramScore = diceSets(qGrams, d.grams);
         score = 0.55 * wordScore + 0.15 * cover + 0.2 * gramScore + 0.1 * numScore;
         if (qNums.length && numScore === 0) score *= 0.8;
+        // Controles, calibradores y kits "duo" son productos distintos al reactivo: solo si se piden
+        QUALIFIERS.forEach(function (w) { if (d.tokenSet.has(w) && qWords.indexOf(w) < 0) score *= 0.85; });
       }
       if (score > 0.12) results.push({ product: d.product, score: score, reason: 'similitud' });
     });
