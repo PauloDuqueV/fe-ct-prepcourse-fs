@@ -59,6 +59,9 @@
     aliases: function () { return load('aliases', {}); },
     saveAliases: function (a) { return save('aliases', a); },
 
+    seedVersion: function () { return load('seedVersion', ''); },
+    saveSeedVersion: function (v) { return save('seedVersion', v); },
+
     draft: function () { return load('draft', null); },
     saveDraft: function (d) { return save('draft', d); },
 

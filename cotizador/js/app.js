@@ -733,6 +733,13 @@
     $('#btn-cat-import').addEventListener('click', function () { importCatalog().catch(function (e) { console.error(e); toast('Error al importar: ' + e.message, true); }); });
     $('#btn-cat-template').addEventListener('click', catalogTemplate);
     $('#btn-cat-export').addEventListener('click', function () { E.catalogToExcel(products, 'catalogo_' + new Date().toISOString().slice(0, 10) + '.xlsx'); });
+    if (Array.isArray(window.SEED_CATALOG) && window.SEED_CATALOG.length) {
+      $('#btn-cat-seed').classList.remove('hidden');
+      $('#btn-cat-seed').addEventListener('click', function () {
+        loadSeedCatalog(true); reindex(); renderCatalog();
+        if (quote.items.some(function (i) { return i.solicitado && !i.codigo; })) rematchAll();
+      });
+    }
     $('#btn-cat-demo').addEventListener('click', function () {
       if (products.length && !confirm('Se agregarán los productos de ejemplo a su catálogo. ¿Continuar?')) return;
       var have = new Set(products.map(function (p) { return p.codigo; }));
@@ -936,6 +943,29 @@
     if (name === 'config') settingsToForm();
   }
 
+  /**
+   * Versión entregada con el catálogo de la empresa (window.SEED_CATALOG): agrega los productos que falten,
+   * sin borrar ni cambiar los que el usuario ya tenga (registrados a mano o importados).
+   * Se ejecuta una vez por versión del catálogo incluido, o cuando el usuario lo pide.
+   */
+  function loadSeedCatalog(force) {
+    var seed = window.SEED_CATALOG;
+    if (!Array.isArray(seed) || !seed.length) return false;
+    var version = String(window.SEED_VERSION || seed.length);
+    if (!force && Store.seedVersion() === version) return false;
+    var have = new Set(products.map(function (p) { return String(p.codigo).toUpperCase(); }));
+    var added = 0;
+    seed.forEach(function (p) {
+      if (!have.has(String(p.codigo).toUpperCase())) { products.push(clone(p)); added++; }
+    });
+    Store.saveProducts(products);
+    Store.saveSeedVersion(version);
+    if (added || force) {
+      setTimeout(function () { toast('Catálogo MEDITIENDA: ' + added + ' productos agregados (total ' + products.length + ').'); }, 400);
+    }
+    return added > 0;
+  }
+
   // ---------- inicio ----------
   function init() {
     var opts = '';
@@ -945,13 +975,7 @@
     if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 
     // Versión entregada con el catálogo de la empresa: se carga sola la primera vez
-    var seeded = false;
-    if (!products.length && Array.isArray(window.SEED_CATALOG) && window.SEED_CATALOG.length) {
-      seeded = true;
-      products = clone(window.SEED_CATALOG);
-      Store.saveProducts(products);
-      setTimeout(function () { toast('Catálogo MEDITIENDA cargado: ' + products.length + ' productos.'); }, 400);
-    }
+    var seeded = loadSeedCatalog(false);
     reindex(); refreshClientList(); settingsToForm();
     quote = Store.draft() || newQuote();
     setGlobalFactor(settings.factorDefault, true);

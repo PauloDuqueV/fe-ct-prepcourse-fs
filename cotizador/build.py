@@ -26,7 +26,10 @@ html = html.replace('src="img/logo-meditienda.jpg"', 'src="data:image/jpeg;base6
 
 if args.seed:
     seed = json.load(open(args.seed, encoding='utf-8'))
-    tag = '<script>window.SEED_CATALOG = ' + json.dumps(seed, ensure_ascii=False).replace('</', '<\\/') + ';</script>\n'
+    import datetime
+    version = datetime.datetime.now().strftime('%Y%m%d%H%M') + '-' + str(len(seed))
+    tag = ('<script>window.SEED_VERSION = ' + json.dumps(version) + '; window.SEED_CATALOG = ' +
+           json.dumps(seed, ensure_ascii=False).replace('</', '<\\/') + ';</script>\n')
     html = html.replace('<script>\n/* js/app.js */', tag + '<script>\n/* js/app.js */')
     assert 'SEED_CATALOG = ' in html
 
