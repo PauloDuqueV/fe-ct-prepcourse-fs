@@ -43,6 +43,8 @@
     productByCode = new Map(products.map(function (p) { return [String(p.codigo).trim().toUpperCase(), p]; }));
     brands = Rules.brandSet(products);
     eqRules = Rules.parseEquivalences(settings.equivalencias);
+    $$('.catalog-empty').forEach(function (el) { el.classList.toggle('hidden', products.length > 0); });
+    $('#cat-status').textContent = products.length ? products.length + ' productos en el catálogo' : '';
     var dl = $('#dl-productos');
     dl.innerHTML = products.map(function (p) { return '<option value="' + esc(p.codigo + ' — ' + p.descripcion) + '">'; }).join('');
   }
@@ -117,24 +119,38 @@
     }
   }
 
-  function matchRequests(reqs) {
-    if (!products.length) toast('El catálogo está vacío: cargue sus listas en la pestaña Catálogo.', true);
-    var added = 0, skipped = 0;
-    reqs.forEach(function (r) {
-      var it = newItem(r);
+  /** Busca el producto para una línea. Devuelve false si la línea parece un título o saludo. */
+  function matchItem(it, r) {
       var m = Matcher.match(Rules.applyEquivalences(r.texto, eqRules), index, { aliases: aliases, limit: 5 });
       // Entre candidatos casi empatados, la presentación más cercana a la pedida va primero
       var k = m[0] && m[0].reason !== 'alias' ? Rules.nearestPresentation(r.texto, m) : 0;
       if (k > 0) { var pick = m.splice(k, 1)[0]; pick.score = Math.max(pick.score, m[0].score); m.unshift(pick); }
       // Sin producto parecido y sin cantidad: casi siempre es un título o saludo ("Pedido laboratorio")
-      if (products.length && (!m[0] || m[0].score < CONF_MIN) && !r.cantidadDetectada) { skipped++; return; }
+      if (products.length && (!m[0] || m[0].score < CONF_MIN) && !r.cantidadDetectada) return false;
       it.alternativas = m.map(function (x) { return { codigo: x.product.codigo, score: x.score }; });
       if (m[0] && m[0].score >= CONF_MIN) {
         var conf = m[0].score;
         // Dos candidatos casi empatados: pedir revisión
         if (m[0].reason !== 'alias' && m[1] && m[0].score - m[1].score < 0.05) conf = Math.min(conf, 0.6);
         assignProduct(it, m[0].product, conf);
-      } else it.confianza = m[0] ? m[0].score : 0;
+      } else { assignProduct(it, null); it.confianza = m[0] ? m[0].score : 0; }
+      return true;
+  }
+
+  function matchRequests(reqs, origen) {
+    if (!products.length) {
+      toast('Su catálogo está vacío: no hay con qué homologar. Vaya a la pestaña Catálogo e importe su lista de precios.', true);
+    }
+    // Si se procesa otra vez la misma solicitud, se reemplazan sus líneas en vez de duplicarlas
+    if (origen && quote.items.some(function (i) { return i.origen === origen; })) {
+      quote.items = quote.items.filter(function (i) { return i.origen !== origen; });
+      toast('Esta solicitud ya estaba cargada: se reemplazaron sus líneas.');
+    }
+    var added = 0, skipped = 0;
+    reqs.forEach(function (r) {
+      var it = newItem(r);
+      it.origen = origen || '';
+      if (!matchItem(it, r)) { skipped++; return; }
       quote.items.push(it);
       added++;
     });
@@ -368,7 +384,7 @@
         autoClient(res.rawText);
         if (res.rawText) { $('#raw-text').value = res.rawText; $('#raw-box').classList.remove('hidden'); if (isImg) $('#raw-box').open = true; }
         if (!res.items.length) toast('No se encontraron productos en ' + file.name + '. Revise el texto leído.', true);
-        else matchRequests(res.items);
+        else matchRequests(res.items, 'file:' + file.name + ':' + file.size);
       } catch (err) {
         console.error(err);
         toast(file.name + ': ' + (err.message || err), true);
@@ -389,6 +405,25 @@
     toast('Cliente detectado en la solicitud: ' + quote.cliente.nombre + '. Verifique el nombre.');
   }
 
+  function textKey(text) {
+    var t = Matcher.normalize(text), h = 0;
+    for (var i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) | 0;
+    return 'txt' + h;
+  }
+
+  /** Vuelve a homologar las líneas que nadie ha confirmado (útil después de importar el catálogo). */
+  function rematchAll() {
+    if (!products.length) { toast('Primero importe su catálogo en la pestaña Catálogo.', true); return; }
+    var n = 0;
+    quote.items.forEach(function (it) {
+      if (!it.solicitado || (it.codigo && it.confianza >= 1)) return;
+      matchItem(it, { texto: it.solicitado, cantidad: it.cantidadOriginal, unidad: it.unidadSolicitada, nota: it.nota, cantidadDetectada: true });
+      n++;
+    });
+    renderItems(); touched();
+    toast(n + ' líneas homologadas de nuevo con el catálogo actual.');
+  }
+
   async function processText(text) {
     if (!text.trim()) { toast('Pegue primero el texto de la solicitud.', true); return; }
     autoClient(text);
@@ -399,7 +434,7 @@
       } else {
         var items = Parsers.parseText(text);
         if (!items.length) toast('No se reconocieron productos en el texto.', true);
-        else matchRequests(items);
+        else matchRequests(items, textKey(text));
       }
     } catch (err) {
       console.error(err);
@@ -456,6 +491,8 @@
     $('#btn-clear-req').addEventListener('click', function () { $('#req-text').value = ''; $('#raw-text').value = ''; $('#raw-box').classList.add('hidden'); });
     $('#btn-reprocess').addEventListener('click', function () { processText($('#raw-text').value); });
     $('#btn-ai-pick').addEventListener('click', aiPick);
+    $('#btn-rematch').addEventListener('click', rematchAll);
+    $$('.go-catalog').forEach(function (b) { b.addEventListener('click', function () { showTab('catalogo'); }); });
     $('#btn-add-row').addEventListener('click', function () {
       var it = newItem(null);
       quote.items.push(it); renderItems(); touched();
@@ -653,6 +690,8 @@
     $('#cat-msg').textContent = 'Importación lista (' + resumen.join(' · ') + '): ' + r.added + ' nuevos, ' + r.updated +
       ' actualizados. Total en catálogo: ' + products.length + '.' + (sinCosto ? ' Atención: ' + sinCosto + ' productos sin costo.' : '');
     $('#cat-file').value = '';
+    // Si la cotización en curso tenía líneas sin producto, se homologan de nuevo con el catálogo nuevo
+    if (quote.items.some(function (i) { return i.solicitado && !i.codigo; })) rematchAll();
   }
 
   function saveProducts() { Store.saveProducts(products); reindex(); renderCatalog(); }
@@ -905,10 +944,19 @@
 
     if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
 
+    // Versión entregada con el catálogo de la empresa: se carga sola la primera vez
+    var seeded = false;
+    if (!products.length && Array.isArray(window.SEED_CATALOG) && window.SEED_CATALOG.length) {
+      seeded = true;
+      products = clone(window.SEED_CATALOG);
+      Store.saveProducts(products);
+      setTimeout(function () { toast('Catálogo MEDITIENDA cargado: ' + products.length + ' productos.'); }, 400);
+    }
     reindex(); refreshClientList(); settingsToForm();
     quote = Store.draft() || newQuote();
     setGlobalFactor(settings.factorDefault, true);
     quoteToForm();
+    if (seeded && quote.items.some(function (i) { return i.solicitado && !i.codigo; })) rematchAll();
 
     $$('.tab').forEach(function (t) { t.addEventListener('click', function () { showTab(t.dataset.tab); }); });
     bindItems(); bindClient(); bindInput(); bindActions(); bindHistory(); bindCatalog(); bindClients(); bindSettings(); bindProductDialog();

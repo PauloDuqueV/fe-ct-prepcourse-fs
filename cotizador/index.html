@@ -39,6 +39,8 @@
 
       <div class="card">
         <h2><span class="step">2</span> Solicitud del cliente</h2>
+        <div class="catalog-empty alert hidden">⚠ Su catálogo está vacío: la herramienta no tiene productos con qué homologar.
+          <button class="go-catalog primary small">Ir a Catálogo e importar</button></div>
         <div id="dropzone" class="dropzone" tabindex="0">
           <input id="file-input" type="file" multiple accept=".xlsx,.xls,.xlsm,.csv,.ods,.docx,.pdf,.txt,image/*" hidden>
           <strong>Arrastre aquí</strong> fotos, Excel, Word, PDF o .txt de WhatsApp<br>
@@ -61,7 +63,9 @@
     </div>
 
     <div class="card">
-      <h2><span class="step">3</span> Homologación y precios</h2>
+      <h2><span class="step">3</span> Homologación y precios <small id="cat-status" class="muted"></small></h2>
+      <div class="catalog-empty alert hidden">⚠ Sin catálogo no se puede homologar. Importe su lista de precios y luego pulse "↻ Volver a homologar".
+        <button class="go-catalog primary small">Ir a Catálogo</button></div>
       <div class="toolbar">
         <div class="factor-box">
           <label>Factor de venta
@@ -86,6 +90,7 @@
         </label>
         <span class="spacer"></span>
         <button id="btn-ai-pick" class="ghost" title="La IA elige entre los candidatos de las líneas con baja confianza">✨ Revisar dudosos con IA</button>
+        <button id="btn-rematch" class="ghost" title="Vuelve a buscar en el catálogo las líneas no confirmadas">↻ Volver a homologar</button>
         <button id="btn-add-row" class="ghost">+ Agregar producto</button>
       </div>
 
