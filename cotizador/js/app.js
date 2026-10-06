@@ -12,6 +12,7 @@
   var aliases = Store.aliases();
   var index = Matcher.buildIndex(products);
   var productByCode = new Map();
+  var brands = new Set(), eqRules = [];
   var quote = null;
 
   var CONF_HIGH = 0.7, CONF_MIN = 0.4;
@@ -40,6 +41,8 @@
   function reindex() {
     index = Matcher.buildIndex(products);
     productByCode = new Map(products.map(function (p) { return [String(p.codigo).trim().toUpperCase(), p]; }));
+    brands = Rules.brandSet(products);
+    eqRules = Rules.parseEquivalences(settings.equivalencias);
     var dl = $('#dl-productos');
     dl.innerHTML = products.map(function (p) { return '<option value="' + esc(p.codigo + ' — ' + p.descripcion) + '">'; }).join('');
   }
@@ -84,7 +87,8 @@
   function newItem(req) {
     return {
       id: uid(), solicitado: req ? req.texto : '', cantidad: req ? req.cantidad : 1, unidadSolicitada: req ? req.unidad : '',
-      nota: req && req.nota ? String(req.nota) : '',
+      nota: req && req.nota ? String(req.nota) : '', cantidadOriginal: req ? req.cantidad : 1, qtyManual: false,
+      marcaPedida: '', presentacion: '',
       codigo: '', descripcion: '', unidad: '', marca: '', categoria: '', costo: 0, iva: settings.ivaDefault,
       factor: globalFactor(), factorSrc: 'global', factorManual: false,
       confianza: 0, alternativas: [], incluir: false
@@ -102,6 +106,15 @@
     if (conf != null) it.confianza = conf;
     if (!it.factorManual) { var r = resolveFactor(p); it.factor = r.f; it.factorSrc = r.src; }
     it.incluir = true;
+    // Reglas comerciales: marca distinta (naranja claro) y presentación ajustada (azul claro)
+    it.marcaPedida = ''; it.presentacion = '';
+    if (it.solicitado) {
+      var req = { texto: it.solicitado, cantidad: it.cantidadOriginal != null ? it.cantidadOriginal : it.cantidad, unidad: it.unidadSolicitada, nota: it.nota };
+      var adj = Rules.adjustQuantity(req, p);
+      it.presentacion = adj.presentacion || '';
+      if (!it.qtyManual) it.cantidad = adj.cantidad;
+      it.marcaPedida = Rules.brandMismatch(req, p, brands) || '';
+    }
   }
 
   function matchRequests(reqs) {
@@ -109,7 +122,10 @@
     var added = 0, skipped = 0;
     reqs.forEach(function (r) {
       var it = newItem(r);
-      var m = Matcher.match(r.texto, index, { aliases: aliases, limit: 4 });
+      var m = Matcher.match(Rules.applyEquivalences(r.texto, eqRules), index, { aliases: aliases, limit: 5 });
+      // Entre candidatos casi empatados, la presentación más cercana a la pedida va primero
+      var k = m[0] && m[0].reason !== 'alias' ? Rules.nearestPresentation(r.texto, m) : 0;
+      if (k > 0) { var pick = m.splice(k, 1)[0]; pick.score = Math.max(pick.score, m[0].score); m.unshift(pick); }
       // Sin producto parecido y sin cantidad: casi siempre es un título o saludo ("Pedido laboratorio")
       if (products.length && (!m[0] || m[0].score < CONF_MIN) && !r.cantidadDetectada) { skipped++; return; }
       it.alternativas = m.map(function (x) { return { codigo: x.product.codigo, score: x.score }; });
@@ -140,6 +156,12 @@
     quote.items.forEach(function (it, i) {
       var tr = document.createElement('tr');
       tr.dataset.id = it.id;
+      if (it.codigo && it.marcaPedida) tr.classList.add('warn-brand');
+      if (it.codigo && it.presentacion) tr.classList.add('warn-pres');
+      var flags = it.codigo ? [
+        it.marcaPedida ? '<div class="flag brand">Marca pedida: ' + esc(it.marcaPedida) + ' · se ofrece la disponible' + (it.marca ? ' (' + esc(it.marca) + ')' : '') + '</div>' : '',
+        it.presentacion ? '<div class="flag pres">Presentación: ' + esc(it.presentacion) + '</div>' : ''
+      ].join('') : '';
       var alts = (it.alternativas || []).filter(function (a) { return a.codigo !== it.codigo; }).slice(0, 3)
         .map(function (a) {
           var p = findProduct(a.codigo);
@@ -148,10 +170,11 @@
       tr.innerHTML =
         '<td><input type="checkbox" class="inc"' + (it.incluir ? ' checked' : '') + '></td>' +
         '<td>' + (i + 1) + ' <span class="conf ' + confClass(it) + '" title="Confianza ' + Math.round((it.confianza || 0) * 100) + '%">●</span></td>' +
-        '<td class="req-text">' + (it.solicitado ? '<span class="req-qty">' + esc(it.cantidad) + ' ' + esc(it.unidadSolicitada || '') + '</span> ' + esc(it.solicitado) : '<span class="muted">(agregado manualmente)</span>') +
+        '<td class="req-text">' + (it.solicitado ? '<span class="req-qty">' + esc(it.cantidadOriginal != null ? it.cantidadOriginal : it.cantidad) + ' ' + esc(it.unidadSolicitada || '') + '</span> ' + esc(it.solicitado) : '<span class="muted">(agregado manualmente)</span>') +
           (it.nota ? '<div class="req-note" title="Requisito / marca indicada por el cliente">Pide: ' + esc(it.nota) + '</div>' : '') + '</td>' +
         '<td><input class="prod" list="dl-productos" placeholder="Buscar producto por código o nombre…" value="' + esc(it.codigo ? it.codigo + ' — ' + it.descripcion : '') + '">' +
-          '<div class="prod-meta">' + esc([it.unidad, it.marca, it.categoria].filter(Boolean).join(' · ')) + '</div>' +
+          '<div class="prod-meta">' + esc([it.unidad, it.marca, it.categoria].filter(Boolean).join(' · ')) + '</div>' + flags +
+          (!it.codigo && it.solicitado ? '<button class="small reg-btn" title="Crear este producto en el catálogo y cotizarlo">+ Registrar producto</button>' : '') +
           (alts ? '<div class="alts"><span class="muted" style="font-size:11px">¿Otro?</span>' + alts + '</div>' : '') + '</td>' +
         '<td><input class="qty" type="number" min="0" step="any" value="' + esc(it.cantidad) + '"></td>' +
         '<td><input class="cost" type="number" min="0" step="any" value="' + esc(it.costo) + '"></td>' +
@@ -199,7 +222,7 @@
       var r = itemFromEvent(e), it = r.it;
       if (!it) return;
       var t = e.target;
-      if (t.classList.contains('qty')) it.cantidad = parseFloat(t.value) || 0;
+      if (t.classList.contains('qty')) { it.cantidad = parseFloat(t.value) || 0; it.qtyManual = true; }
       else if (t.classList.contains('cost')) it.costo = parseFloat(t.value) || 0;
       else if (t.classList.contains('iva')) it.iva = parseFloat(t.value) || 0;
       else if (t.classList.contains('factor')) {
@@ -231,7 +254,9 @@
     body.addEventListener('click', function (e) {
       var r = itemFromEvent(e), it = r.it;
       if (!it) return;
-      if (e.target.classList.contains('ok-btn')) {
+      if (e.target.classList.contains('reg-btn')) {
+        openProductDialog(it);
+      } else if (e.target.classList.contains('ok-btn')) {
         it.confianza = 1; renderItems(); touched();
       } else if (e.target.classList.contains('del')) {
         quote.items = quote.items.filter(function (x) { return x !== it; });
@@ -702,6 +727,47 @@
     });
   }
 
+  // ---------- registro manual de productos que no están en el catálogo ----------
+  var registering = null;
+  function nextManualCode() {
+    var n = 1, code;
+    do { code = 'MAN-' + String(n++).padStart(4, '0'); } while (findProduct(code));
+    return code;
+  }
+  function openProductDialog(it) {
+    registering = it;
+    var cats = Array.from(new Set(products.map(function (p) { return p.categoria; }).filter(Boolean))).sort();
+    $('#dl-categorias').innerHTML = cats.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('');
+    $('#dp-codigo').value = nextManualCode();
+    $('#dp-descripcion').value = it.solicitado ? it.solicitado.toUpperCase() : '';
+    $('#dp-categoria').value = ''; $('#dp-proveedor').value = ''; $('#dp-unidad').value = '';
+    $('#dp-marca').value = it.nota || ''; $('#dp-costo').value = ''; $('#dp-iva').value = settings.ivaDefault;
+    $('#dp-sinonimos').value = it.solicitado || '';
+    $('#dp-guardar').checked = true;
+    $('#dlg-product').showModal();
+    $('#dp-costo').focus();
+  }
+  function bindProductDialog() {
+    $('#dlg-product').addEventListener('close', function () {
+      if ($('#dlg-product').returnValue !== 'ok' || !registering) return;
+      var p = {
+        codigo: $('#dp-codigo').value.trim() || nextManualCode(), descripcion: $('#dp-descripcion').value.trim(),
+        categoria: $('#dp-categoria').value.trim(), proveedor: $('#dp-proveedor').value.trim(), unidad: $('#dp-unidad').value.trim(),
+        marca: $('#dp-marca').value.trim(), costo: parseFloat($('#dp-costo').value) || 0,
+        iva: $('#dp-iva').value === '' ? settings.ivaDefault : Number($('#dp-iva').value), sinonimos: $('#dp-sinonimos').value.trim()
+      };
+      if (!p.descripcion) return;
+      if ($('#dp-guardar').checked) {
+        if (findProduct(p.codigo)) { toast('Ya existe un producto con el código ' + p.codigo + '.', true); return; }
+        products.push(p); saveProducts();
+        toast('Producto ' + p.codigo + ' registrado en el catálogo.');
+      }
+      assignProduct(registering, p, 1);
+      registering = null;
+      renderItems(); touched();
+    });
+  }
+
   // ---------- clientes ----------
   var editingClient = null;
   function renderClients() {
@@ -767,7 +833,7 @@
   var S_MAP = { nombre: 'empresa.nombre', nit: 'empresa.nit', telefono: 'empresa.telefono', direccion: 'empresa.direccion', ciudad: 'empresa.ciudad',
     email: 'empresa.email', web: 'empresa.web', firma: 'firmaNombre', cargo: 'firmaCargo', prefijo: 'prefijo', consecutivo: 'consecutivo',
     factor: 'factorDefault', iva: 'ivaDefault', validez: 'validezDias', redondeo: 'redondeo', pago: 'condicionesPago', entrega: 'tiempoEntrega',
-    notas: 'notas', apikey: 'apiKey', model: 'aiModel' };
+    notas: 'notas', apikey: 'apiKey', model: 'aiModel', equiv: 'equivalencias' };
   function getPath(o, p) { return p.split('.').reduce(function (a, k) { return a && a[k]; }, o); }
   function setPath(o, p, v) { var ks = p.split('.'), last = ks.pop(); ks.reduce(function (a, k) { return a[k]; }, o)[last] = v; }
 
@@ -790,7 +856,7 @@
         setPath(settings, S_MAP[k], v);
       });
       if (settings.consecutivo < 1) settings.consecutivo = 1;
-      Store.saveSettings(settings); settingsToForm(); toast('Configuración guardada.');
+      Store.saveSettings(settings); settingsToForm(); reindex(); toast('Configuración guardada.');
     });
     $('#s-logo').addEventListener('change', async function (e) {
       var f = e.target.files[0]; if (!f) return;
@@ -845,7 +911,7 @@
     quoteToForm();
 
     $$('.tab').forEach(function (t) { t.addEventListener('click', function () { showTab(t.dataset.tab); }); });
-    bindItems(); bindClient(); bindInput(); bindActions(); bindHistory(); bindCatalog(); bindClients(); bindSettings();
+    bindItems(); bindClient(); bindInput(); bindActions(); bindHistory(); bindCatalog(); bindClients(); bindSettings(); bindProductDialog();
 
     var missing = ['XLSX', 'ExcelJS', 'jspdf', 'mammoth', 'Tesseract', 'pdfjsLib'].filter(function (g) { return !window[g]; });
     if (missing.length) toast('No se pudieron cargar algunas librerías (' + missing.join(', ') + '). Verifique la conexión a internet.', true);

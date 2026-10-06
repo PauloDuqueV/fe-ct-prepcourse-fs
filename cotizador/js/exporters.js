@@ -119,10 +119,10 @@
     });
 
     // Hoja de cálculo interno: costo y factor editables -> precio
-    calc.columns = [{ width: 6 }, { width: 14 }, { width: 46 }, { width: 14 }, { width: 10 }, { width: 15 }, { width: 11 }, { width: 15 }, { width: 3 }, { width: 22 }, { width: 10 }];
-    calc.getRow(1).values = ['Ítem', 'Código', 'Descripción', 'Costo unitario', 'Factor', 'Precio venta', 'Margen %', 'Utilidad unit.', '', 'Redondear al múltiplo de', Number(q.redondeo) || 0.01];
+    calc.columns = [{ width: 6 }, { width: 14 }, { width: 46 }, { width: 14 }, { width: 10 }, { width: 15 }, { width: 11 }, { width: 15 }, { width: 50 }, { width: 22 }, { width: 10 }];
+    calc.getRow(1).values = ['Ítem', 'Código', 'Descripción', 'Costo unitario', 'Factor', 'Precio venta', 'Margen %', 'Utilidad unit.', 'Observación', 'Redondear al múltiplo de', Number(q.redondeo) || 0.01];
     calc.getRow(1).eachCell(function (c, col) {
-      if (col <= 8) { c.font = { bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: blue } }; c.border = border; }
+      if (col <= 9) { c.font = { bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: blue } }; c.border = border; }
     });
     calc.getCell('J1').font = { bold: true };
     calc.getCell('K1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
@@ -141,7 +141,13 @@
       calc.getCell('E' + cr).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
       calc.getCell('E' + cr).dataValidation = { type: 'decimal', operator: 'between', allowBlank: false, formulae: [0.01, 1],
         showErrorMessage: true, errorTitle: 'Factor inválido', error: 'El factor debe estar entre 0,01 y 1,00' };
-      for (var k = 1; k <= 8; k++) calc.getRow(cr).getCell(k).border = border;
+      var obs = [it.marcaPedida && 'Marca pedida: ' + it.marcaPedida + ' (se ofrece la disponible)', it.presentacion].filter(Boolean).join(' · ');
+      if (obs) {
+        calc.getCell('I' + cr).value = obs;
+        calc.getCell('I' + cr).alignment = { wrapText: true, vertical: 'top' };
+        calc.getCell('I' + cr).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: it.marcaPedida ? 'FFFFE5CC' : 'FFDDEEFF' } };
+      }
+      for (var k = 1; k <= 9; k++) calc.getRow(cr).getCell(k).border = border;
 
       var row = ws.getRow(r);
       row.values = [i + 1, it.codigo, it.descripcion + (it.marca ? ' - ' + it.marca : ''), it.unidad || '', Number(it.cantidad) || 0];

@@ -152,3 +152,18 @@ dialog label { margin-bottom: 8px; }
 .toast.error { background: var(--danger); }
 button.ok-btn { padding: 1px 7px; color: var(--success); border-color: var(--success); background: transparent; }
 button.ok-btn:hover { background: var(--success); color: #fff; }
+:root { --brand-bg: #fff1e0; --pres-bg: #e3f0ff; }
+@media (prefers-color-scheme: dark) { :root { --brand-bg: #3a2a16; --pres-bg: #16283d; } }
+table.items tr.warn-brand td { background: var(--brand-bg); }
+table.items tr.warn-pres td { background: var(--pres-bg); }
+/* ambas: fondo azul claro con franja naranja a la izquierda */
+table.items tr.warn-brand.warn-pres td { background: var(--pres-bg); }
+table.items tr.warn-brand.warn-pres td:first-child { box-shadow: inset 6px 0 0 #f5a65b; }
+.flag { font-size: 11.5px; margin-top: 3px; font-weight: 600; }
+.flag.brand { color: #b45309; }
+.flag.pres { color: #1d5fa8; }
+@media (prefers-color-scheme: dark) { .flag.brand { color: #f5a65b; } .flag.pres { color: #7fb6ff; } }
+.swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-left: 8px; border: 1px solid var(--line); }
+.swatch.brand { background: var(--brand-bg); }
+.swatch.pres { background: var(--pres-bg); }
+button.reg-btn { margin-top: 4px; color: var(--primary-2); border-color: var(--primary-2); }

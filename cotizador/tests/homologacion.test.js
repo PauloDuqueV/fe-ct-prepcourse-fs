@@ -102,3 +102,39 @@ describe('importación de catálogo', () => {
     expect(again).toMatchObject({ added: 0, updated: 2 });
   });
 });
+
+describe('reglas comerciales', () => {
+  const Rules = require('../js/rules.js');
+  const brands = Rules.brandSet([{ marca: 'CTK' }]);
+
+  test('equivalencias de la empresa (con plural)', () => {
+    const eq = Rules.parseEquivalences(Rules.DEFAULT_EQUIVALENCES);
+    expect(Rules.applyEquivalences('Guardianes grande', eq)).toBe('guardian 2.9');
+  });
+
+  test('marca distinta a la pedida', () => {
+    const p = { descripcion: 'SYPHILIS CAJA X 30 PBS CTK' };
+    expect(Rules.brandMismatch({ texto: 'Sifilis ac abbot' }, p, brands)).toBe('ABBOTT');
+    expect(Rules.brandMismatch({ texto: 'Sifilis CTK' }, p, brands)).toBeNull();
+    expect(Rules.brandMismatch({ texto: 'Sifilis' }, p, brands)).toBeNull();
+  });
+
+  test('presentación distinta: ajusta la cantidad', () => {
+    expect(Rules.adjustQuantity({ texto: 'LUGOL DE GRAM X 1000ML', cantidad: 1 }, { descripcion: 'LUGOL GRAM 500ML' }).cantidad).toBe(2);
+    expect(Rules.adjustQuantity({ texto: 'prueba embarazo x 50', cantidad: 2, unidad: 'cajas' }, { descripcion: 'HCG CASSETE CJX 25' }).cantidad).toBe(4);
+    expect(Rules.adjustQuantity({ texto: 'tubos lila', cantidad: 4, unidad: 'gradillas' }, { descripcion: 'TUBO LILA CAJAX 50' }).cantidad).toBe(8);
+    // en tubos el volumen es una característica: no cambia la cantidad, solo avisa
+    const t = Rules.adjustQuantity({ texto: 'tubo lila 4ml', cantidad: 3, unidad: 'cajas' }, { descripcion: 'TUBO LILA 2ML CAJAX 100' });
+    expect(t).toEqual({ cantidad: 3, presentacion: 'Pide 4 ml, se ofrece 2 ml' });
+    expect(Rules.adjustQuantity({ texto: 'tubo lila', cantidad: 3 }, { descripcion: 'TUBO LILA CAJAX 100' }).presentacion).toBeNull();
+  });
+
+  test('elige la presentación más cercana entre candidatos parecidos', () => {
+    const cands = [
+      { score: 0.8, product: { descripcion: 'GLUCOSA LS 2 X 125 ML' } },
+      { score: 0.78, product: { descripcion: 'GLUCOSA LS 4 X 250 ML' } },
+    ];
+    expect(Rules.nearestPresentation('glucosa 1000 ml', cands)).toBe(1);
+    expect(Rules.nearestPresentation('glucosa', cands)).toBe(0);
+  });
+});

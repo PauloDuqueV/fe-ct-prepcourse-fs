@@ -13,10 +13,17 @@ Herramienta web para el área de cotizaciones. Funciona en el navegador, no nece
    2. el factor del cliente para esa categoría (por ejemplo, Guantes 0,80 o Reactivos 0,65);
    3. el factor general del cliente;
    4. el factor global.
-6. **Exporta**:
+6. **Aplica las reglas comerciales de la empresa**:
+   - **Marca distinta** (fila **naranja claro**): si el cliente pide una marca (ABBOTT, BD, ALBOR…, en el texto o en la columna de requisito) y el producto del catálogo es de otra, se cotiza la marca disponible y la fila queda marcada.
+   - **Presentación distinta** (fila **azul claro**): entre productos parecidos se elige la presentación más cercana a la pedida y se ajusta la cantidad (pide 1 L y hay frascos de 500 ml → 2 frascos; pide caja x 50 y hay x 25 → el doble). En tubos y jeringas el volumen es una característica: se avisa pero no se cambia la cantidad.
+   - **Unidades del cliente**: 1 gradilla = 100 tubos, 1 ciento = 100, 1 docena = 12.
+   - **Equivalencias propias** (Configuración): "guardian grande = guardian 2.9", etc. Se pueden agregar más.
+   - **Productos que no están en el catálogo**: botón **+ Registrar producto** en la línea; se cotiza y, si quiere, queda guardado en el catálogo con código `MAN-0001`…
+   Las observaciones de marca y presentación salen en la hoja *Cálculo interno* del Excel.
+7. **Exporta**:
    - **Excel modificable**, con dos hojas. La hoja *Cotización* es la que ve el cliente. La hoja *Cálculo interno* trae el costo, el factor, el margen y la utilidad. Si cambia un factor en esa hoja, el precio, el IVA y el total se recalculan solos.
    - **PDF**, con la marca de agua "BORRADOR" hasta que alguien aprueba la cotización. Al aprobarla se pide el nombre y el cargo de quien aprueba, y el PDF final sale con el sello **APROBADA** y la fecha. Si se edita una cotización ya aprobada, vuelve a borrador.
-7. **Historial** con consecutivo automático (COT-0001…), para abrir, duplicar o volver a descargar cualquier cotización.
+8. **Historial** con consecutivo automático (COT-0001…), para abrir, duplicar o volver a descargar cualquier cotización.
 
 El nombre del cliente es obligatorio y aparece en el Excel y en el PDF.
 
@@ -74,6 +81,7 @@ index.html          interfaz
 css/styles.css      estilos
 js/matcher.js       homologación (normalización, vocabulario de laboratorio, puntaje)
 js/catalog.js       importación de listas de proveedores
+js/rules.js         reglas comerciales (marca, presentación, equivalencias)
 js/parsers.js       lectura de texto/WhatsApp, Excel, Word, PDF y OCR de imágenes
 js/exporters.js     cálculo de precios, Excel con fórmulas y PDF
 js/ai.js            lectura opcional con Claude
