@@ -148,3 +148,23 @@ describe('color de tapa', () => {
     expect(Matcher.match('TUBO TAPA AMARILLA 5 ML', idx)[0].product.codigo).toBe('AMA');
   });
 });
+
+describe('tubos en caja x 100', () => {
+  const Rules = require('../js/rules.js');
+  const packs = Rules.parsePacks(Rules.DEFAULT_PACKS);
+  const lila = { descripcion: 'TUBO TAPA LILA EDTA K2 13X75MM X 4ML' };
+  const q = (cantidad, unidad) => Rules.adjustQuantity({ texto: 'tubo tapa lila 4ml', cantidad, unidad }, lila, packs);
+
+  test('más de 100 sin unidad son unidades sueltas: se convierten a cajas', () => {
+    expect(q(1000).cantidad).toBe(10);
+    expect(q(1500).cantidad).toBe(15);
+  });
+  test('si no es múltiplo de 100 se redondea hacia arriba y se avisa', () => {
+    expect(q(250)).toEqual({ cantidad: 3, presentacion: expect.stringContaining('no es múltiplo de 100') });
+  });
+  test('cantidades pequeñas o en cajas no cambian', () => {
+    expect(q(5).cantidad).toBe(5);
+    expect(q(5, 'cajas').cantidad).toBe(5);
+    expect(q(4, 'gradillas')).toEqual({ cantidad: 4, presentacion: null });
+  });
+});

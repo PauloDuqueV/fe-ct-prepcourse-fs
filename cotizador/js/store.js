@@ -29,6 +29,7 @@
     tiempoEntrega: '3 a 5 días hábiles',
     notas: 'Precios sujetos a disponibilidad de inventario.',
     equivalencias: (root.Rules && root.Rules.DEFAULT_EQUIVALENCES) || '',
+    presentaciones: (root.Rules && root.Rules.DEFAULT_PACKS) || '',
     factorDefault: 0.75,
     ivaDefault: 19,
     redondeo: 100,

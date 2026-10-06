@@ -12,7 +12,7 @@
   var aliases = Store.aliases();
   var index = Matcher.buildIndex(products);
   var productByCode = new Map();
-  var brands = new Set(), eqRules = [];
+  var brands = new Set(), eqRules = [], packRules = [];
   var quote = null;
 
   var CONF_HIGH = 0.7, CONF_MIN = 0.4;
@@ -43,6 +43,7 @@
     productByCode = new Map(products.map(function (p) { return [String(p.codigo).trim().toUpperCase(), p]; }));
     brands = Rules.brandSet(products);
     eqRules = Rules.parseEquivalences(settings.equivalencias);
+    packRules = Rules.parsePacks(settings.presentaciones);
     $$('.catalog-empty').forEach(function (el) { el.classList.toggle('hidden', products.length > 0); });
     $('#cat-status').textContent = products.length ? products.length + ' productos en el catálogo' : '';
     var dl = $('#dl-productos');
@@ -112,7 +113,7 @@
     it.marcaPedida = ''; it.presentacion = '';
     if (it.solicitado) {
       var req = { texto: it.solicitado, cantidad: it.cantidadOriginal != null ? it.cantidadOriginal : it.cantidad, unidad: it.unidadSolicitada, nota: it.nota };
-      var adj = Rules.adjustQuantity(req, p);
+      var adj = Rules.adjustQuantity(req, p, packRules);
       it.presentacion = adj.presentacion || '';
       if (!it.qtyManual) it.cantidad = adj.cantidad;
       it.marcaPedida = Rules.brandMismatch(req, p, brands) || '';
@@ -884,7 +885,7 @@
   var S_MAP = { nombre: 'empresa.nombre', nit: 'empresa.nit', telefono: 'empresa.telefono', direccion: 'empresa.direccion', ciudad: 'empresa.ciudad',
     email: 'empresa.email', web: 'empresa.web', firma: 'firmaNombre', cargo: 'firmaCargo', prefijo: 'prefijo', consecutivo: 'consecutivo',
     factor: 'factorDefault', iva: 'ivaDefault', validez: 'validezDias', redondeo: 'redondeo', pago: 'condicionesPago', entrega: 'tiempoEntrega',
-    notas: 'notas', apikey: 'apiKey', model: 'aiModel', equiv: 'equivalencias' };
+    notas: 'notas', apikey: 'apiKey', model: 'aiModel', equiv: 'equivalencias', packs: 'presentaciones' };
   function getPath(o, p) { return p.split('.').reduce(function (a, k) { return a && a[k]; }, o); }
   function setPath(o, p, v) { var ks = p.split('.'), last = ks.pop(); ks.reduce(function (a, k) { return a[k]; }, o)[last] = v; }
 

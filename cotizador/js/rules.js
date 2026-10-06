@@ -71,40 +71,66 @@
    * Compara lo pedido con el producto ofrecido.
    * item: { texto, cantidad, unidad }  ->  { cantidad, presentacion: null | 'texto explicativo' }
    */
-  function adjustQuantity(item, product) {
+  /** "tubo = 100" (una por línea): unidades por caja cuando la descripción del producto no lo dice. */
+  function parsePacks(text) {
+    return String(text || '').split(/\r?\n/).map(function (l) {
+      if (/^\s*#/.test(l)) return null;
+      var m = l.match(/^\s*(.+?)\s*=\s*(\d+)\s*$/);
+      if (!m) return null;
+      var words = N(m[1]).split(/\s+/).filter(Boolean);
+      return { words: words, pack: Number(m[2]) };
+    }).filter(Boolean);
+  }
+
+  function defaultPack(product, packRules) {
+    var words = N(productText(product)).split(/[^a-z0-9]+/);
+    var hit = (packRules || []).find(function (r) {
+      return r.words.every(function (w) { return words.some(function (x) { return x === w || x === w + 's' || x === w + 'es'; }); });
+    });
+    return hit ? hit.pack : null;
+  }
+
+  /**
+   * Compara lo pedido con el producto ofrecido.
+   * item: { texto, cantidad, unidad }  ->  { cantidad, presentacion: null | 'texto explicativo' }
+   * packRules: presentaciones por defecto ("tubo = 100") para productos cuya descripción no trae el empaque.
+   */
+  function adjustQuantity(item, product, packRules) {
     var qty = Number(item.cantidad) || 1;
     var prod = size(productText(product));
     var req = size(item.texto);
     var unit = N(item.unidad).trim();
-    var note = null, newQty = qty;
+    var pack = prod.pack || defaultPack(product, packRules);
+    var notes = [], newQty = qty;
 
     if (UNIT_SIZE[unit]) {
       // "4 gradillas de tubos" = 400 tubos
       var loose = qty * UNIT_SIZE[unit];
-      if (prod.pack && prod.pack !== UNIT_SIZE[unit]) {
-        newQty = Math.ceil(loose / prod.pack);
-        note = qty + ' ' + unit + ' = ' + loose + ' unidades → ' + newQty + ' × presentación de ' + prod.pack;
-      } // sin empaque conocido se asume 1 gradilla = 1 presentación de 100
-    } else if (req.ml && prod.ml && Math.abs(req.ml - prod.ml) / req.ml > 0.05) {
-      // En tubos, jeringas o recolectores el volumen es una característica, no una cantidad a reponer
-      var container = CONTAINER.test(N(productText(product))) || req.pack || prod.pack;
-      if (!container) newQty = Math.max(1, Math.ceil(qty * req.ml / prod.ml - 1e-9));
-      note = 'Pide ' + fmtMl(req.ml) + ', se ofrece ' + fmtMl(prod.ml) + (newQty !== qty ? ' → cantidad ' + qty + ' → ' + newQty : '');
+      if (pack && pack !== UNIT_SIZE[unit]) {
+        newQty = Math.ceil(loose / pack);
+        notes.push(qty + ' ' + unit + ' = ' + loose + ' unidades → ' + newQty + ' × presentación de ' + pack);
+      }
     } else if (req.pack && prod.pack && req.pack !== prod.pack) {
       newQty = Math.max(1, Math.ceil(qty * req.pack / prod.pack - 1e-9));
-      note = 'Pide presentación x ' + req.pack + ', se ofrece x ' + prod.pack + (newQty !== qty ? ' → cantidad ' + qty + ' → ' + newQty : '');
-    } else if (!unit && prod.pack && qty >= prod.pack && qty % prod.pack === 0) {
-      // "TUBO LILA 1000" sin unidad y el producto viene x 100: son unidades sueltas -> 10 cajas
-      newQty = qty / prod.pack;
-      note = qty + ' unidades → ' + newQty + ' × presentación de ' + prod.pack + ' (verifique)';
-    } else if (!unit && !prod.pack && qty >= 100 && CONTAINER.test(N(productText(product)))) {
-      note = 'Cantidad ' + qty + ': parece pedida en unidades sueltas; verifique cuántas cajas son';
-    } else if (LOOSE_UNITS.test(unit) && prod.pack && qty >= prod.pack) {
-      // "200 tubos" con caja x 100 -> 2 cajas
-      newQty = Math.ceil(qty / prod.pack);
-      note = qty + ' ' + unit + ' → ' + newQty + ' × presentación de ' + prod.pack;
+      notes.push('Pide presentación x ' + req.pack + ', se ofrece x ' + prod.pack + (newQty !== qty ? ' → cantidad ' + qty + ' → ' + newQty : ''));
+    } else if (pack && ((!unit && qty > pack) || (LOOSE_UNITS.test(unit) && qty >= pack))) {
+      // Más unidades que las de una caja: son unidades sueltas -> cajas completas (siempre hacia arriba)
+      newQty = Math.ceil(qty / pack);
+      var n = qty + ' ' + (unit || 'unidades') + ' → ' + newQty + ' × caja de ' + pack;
+      if (qty % pack) n += ' · no es múltiplo de ' + pack + ': se redondea a ' + newQty * pack + ' unidades';
+      notes.push(n);
+    } else if (pack && !unit && qty === pack) {
+      notes.push('¿' + qty + ' cajas o 1 caja de ' + pack + ' unidades? Verifique');
     }
-    return { cantidad: newQty, presentacion: note };
+
+    if (req.ml && prod.ml && Math.abs(req.ml - prod.ml) / req.ml > 0.05) {
+      // En tubos, jeringas o recolectores el volumen es una característica, no una cantidad a reponer
+      var container = CONTAINER.test(N(productText(product))) || req.pack || pack;
+      var before = newQty;
+      if (!container && newQty === qty) newQty = Math.max(1, Math.ceil(qty * req.ml / prod.ml - 1e-9));
+      notes.push('Pide ' + fmtMl(req.ml) + ', se ofrece ' + fmtMl(prod.ml) + (newQty !== before ? ' → cantidad ' + before + ' → ' + newQty : ''));
+    }
+    return { cantidad: newQty, presentacion: notes.length ? notes.join(' · ') : null };
   }
 
   function fmtMl(ml) { return ml >= 1000 ? (ml / 1000).toLocaleString('es-CO') + ' L' : ml.toLocaleString('es-CO') + ' ml'; }
@@ -158,6 +184,12 @@
     return t;
   }
 
+  var DEFAULT_PACKS = [
+    '# Unidades por caja cuando la descripción del producto no lo dice:  palabra(s) = unidades',
+    '# Si el cliente pide más que eso, se toma como unidades sueltas y se convierte a cajas (hacia arriba).',
+    'tubo = 100'
+  ].join('\n');
+
   var DEFAULT_EQUIVALENCES = [
     '# Una equivalencia por línea:  lo que escribe el cliente = cómo está en nuestro catálogo',
     'guardian grande = guardian 2.9',
@@ -167,9 +199,9 @@
   ].join('\n');
 
   var api = {
-    size: size, nearestPresentation: nearestPresentation, adjustQuantity: adjustQuantity,
+    size: size, parsePacks: parsePacks, defaultPack: defaultPack, nearestPresentation: nearestPresentation, adjustQuantity: adjustQuantity,
     brandSet: brandSet, requestedBrands: requestedBrands, brandMismatch: brandMismatch,
-    parseEquivalences: parseEquivalences, applyEquivalences: applyEquivalences, DEFAULT_EQUIVALENCES: DEFAULT_EQUIVALENCES
+    parseEquivalences: parseEquivalences, applyEquivalences: applyEquivalences, DEFAULT_EQUIVALENCES: DEFAULT_EQUIVALENCES, DEFAULT_PACKS: DEFAULT_PACKS
   };
   root.Rules = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
