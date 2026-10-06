@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cotizador</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="logo-dot"></span><span id="brand-name">Cotizador</span></div>
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="cotizar">Cotizar</button>
+    <button class="tab" data-tab="historial">Historial</button>
+    <button class="tab" data-tab="catalogo">Catálogo</button>
+    <button class="tab" data-tab="clientes">Clientes</button>
+    <button class="tab" data-tab="config">Configuración</button>
+  </nav>
+</header>
+
+<main>
+  <!-- ===================== COTIZAR ===================== -->
+  <section id="tab-cotizar" class="panel active">
+    <div class="grid-2">
+      <div class="card">
+        <h2><span class="step">1</span> Cliente <small id="quote-number" class="muted"></small></h2>
+        <div class="form-grid">
+          <label class="span-2">Nombre del cliente *
+            <input id="c-nombre" list="dl-clientes" placeholder="Escriba o seleccione el cliente" autocomplete="off" required>
+          </label>
+          <label>NIT / CC <input id="c-nit"></label>
+          <label>Ciudad <input id="c-ciudad"></label>
+          <label>Contacto <input id="c-contacto"></label>
+          <label>Teléfono <input id="c-telefono"></label>
+          <label class="span-2">Correo <input id="c-email" type="email"></label>
+        </div>
+        <p id="client-hint" class="hint"></p>
+      </div>
+
+      <div class="card">
+        <h2><span class="step">2</span> Solicitud del cliente</h2>
+        <div id="dropzone" class="dropzone" tabindex="0">
+          <input id="file-input" type="file" multiple accept=".xlsx,.xls,.xlsm,.csv,.ods,.docx,.pdf,.txt,image/*" hidden>
+          <strong>Arrastre aquí</strong> fotos, Excel, Word, PDF o .txt de WhatsApp<br>
+          <span class="muted">o haga clic para buscar · también puede pegar una captura con Ctrl+V</span>
+        </div>
+        <textarea id="req-text" rows="5" placeholder="…o pegue aquí el mensaje de WhatsApp / correo con la lista de productos"></textarea>
+        <div class="row-actions">
+          <label class="check"><input type="checkbox" id="use-ai"> Leer con IA (Claude) <span id="ai-status" class="muted"></span></label>
+          <span class="spacer"></span>
+          <button id="btn-clear-req" class="ghost">Limpiar</button>
+          <button id="btn-process-text" class="primary">Procesar texto</button>
+        </div>
+        <div id="progress" class="progress hidden"><div class="bar"></div><span class="label"></span></div>
+        <details id="raw-box" class="hidden">
+          <summary>Texto leído del archivo (puede corregirlo y volver a procesar)</summary>
+          <textarea id="raw-text" rows="6"></textarea>
+          <button id="btn-reprocess" class="ghost">Volver a procesar este texto</button>
+        </details>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="step">3</span> Homologación y precios</h2>
+      <div class="toolbar">
+        <div class="factor-box">
+          <label>Factor de venta
+            <span class="factor-inputs">
+              <input id="g-factor-range" type="range" min="0.01" max="1" step="0.01" value="0.75">
+              <input id="g-factor" type="number" min="0.01" max="1" step="0.01" value="0.75" list="dl-factores">
+            </span>
+          </label>
+          <span class="muted">Precio = costo ÷ factor · <b id="g-margin">margen 25%</b></span>
+        </div>
+        <button id="btn-apply-all" class="ghost">Aplicar a todos</button>
+        <button id="btn-apply-sel" class="ghost">Aplicar a marcados</button>
+        <label>Redondeo
+          <select id="redondeo">
+            <option value="0">Sin redondeo</option>
+            <option value="1">$1</option>
+            <option value="10">$10</option>
+            <option value="50">$50</option>
+            <option value="100">$100</option>
+            <option value="1000">$1.000</option>
+          </select>
+        </label>
+        <span class="spacer"></span>
+        <button id="btn-ai-pick" class="ghost" title="La IA elige entre los candidatos de las líneas con baja confianza">✨ Revisar dudosos con IA</button>
+        <button id="btn-add-row" class="ghost">+ Agregar producto</button>
+      </div>
+
+      <div class="table-wrap">
+        <table id="items-table" class="items">
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="chk-all" title="Marcar todos"></th>
+              <th>#</th>
+              <th class="w-req">Solicitado por el cliente</th>
+              <th class="w-prod">Producto homologado (nuestro catálogo)</th>
+              <th>Cant.</th>
+              <th>Costo</th>
+              <th>Factor</th>
+              <th>Precio unit.</th>
+              <th>IVA</th>
+              <th>Total</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="items-body"></tbody>
+        </table>
+        <p id="empty-items" class="empty">Aún no hay productos. Cargue la solicitud del cliente en el paso 2.</p>
+      </div>
+      <div class="legend">
+        <span class="conf high">●</span> coincidencia alta
+        <span class="conf mid">●</span> revisar
+        <span class="conf low">●</span> sin coincidencia / dudosa ·
+        Solo se cotizan las líneas marcadas con producto asignado.
+      </div>
+
+      <div class="totals">
+        <div><span>Costo total</span><b id="t-costo">$0</b></div>
+        <div><span>Utilidad</span><b id="t-util">$0</b></div>
+        <div><span>Margen</span><b id="t-margen">0%</b></div>
+        <div><span>Subtotal</span><b id="t-subtotal">$0</b></div>
+        <div><span>IVA</span><b id="t-iva">$0</b></div>
+        <div class="grand"><span>TOTAL</span><b id="t-total">$0</b></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="step">4</span> Condiciones, aprobación y descarga</h2>
+      <div class="form-grid cols-3">
+        <label>Condiciones de pago <input id="q-pago"></label>
+        <label>Tiempo de entrega <input id="q-entrega"></label>
+        <label>Validez (días) <input id="q-validez" type="number" min="1"></label>
+        <label class="span-3">Observaciones <textarea id="q-obs" rows="2"></textarea></label>
+      </div>
+      <div class="row-actions">
+        <span id="q-estado" class="badge">Borrador</span>
+        <span class="spacer"></span>
+        <button id="btn-new" class="ghost">Nueva cotización</button>
+        <button id="btn-save">💾 Guardar</button>
+        <button id="btn-excel">📊 Excel modificable</button>
+        <button id="btn-pdf">📄 PDF</button>
+        <button id="btn-approve" class="success">✔ Aprobar</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== HISTORIAL ===================== -->
+  <section id="tab-historial" class="panel">
+    <div class="card">
+      <h2>Cotizaciones guardadas</h2>
+      <div class="toolbar"><input id="h-search" placeholder="Buscar por cliente o número…"></div>
+      <div class="table-wrap">
+        <table class="list">
+          <thead><tr><th>Número</th><th>Fecha</th><th>Cliente</th><th>Ítems</th><th>Total</th><th>Estado</th><th></th></tr></thead>
+          <tbody id="h-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== CATÁLOGO ===================== -->
+  <section id="tab-catalogo" class="panel">
+    <div class="card">
+      <h2>Importar listas de proveedores</h2>
+      <p class="muted">Excel o CSV con columnas como: <b>Código, Descripción, Categoría (área), Proveedor, Unidad, Marca, Costo, IVA, Sinónimos</b>.
+        Los nombres de columna se reconocen aunque varíen (p. ej. "Ref", "Producto", "Precio costo", "Línea").</p>
+      <div class="form-grid cols-3">
+        <label>Archivo <input id="cat-file" type="file" accept=".xlsx,.xls,.csv,.ods"></label>
+        <label>Proveedor (si el archivo no lo trae) <input id="cat-prov" placeholder="Opcional"></label>
+        <label>Categoría (si el archivo no la trae) <input id="cat-cat" placeholder="Opcional"></label>
+        <label>Modo
+          <select id="cat-mode">
+            <option value="merge">Actualizar existentes y agregar nuevos (por código)</option>
+            <option value="replace-prov">Reemplazar solo los productos de ese proveedor</option>
+            <option value="replace">Reemplazar todo el catálogo</option>
+          </select>
+        </label>
+      </div>
+      <div class="row-actions">
+        <button id="btn-cat-import" class="primary">Importar</button>
+        <button id="btn-cat-template" class="ghost">Descargar plantilla</button>
+        <button id="btn-cat-export" class="ghost">Exportar catálogo</button>
+        <button id="btn-cat-demo" class="ghost">Cargar catálogo de ejemplo</button>
+        <span class="spacer"></span>
+        <button id="btn-cat-clear" class="danger ghost">Vaciar catálogo</button>
+      </div>
+      <p id="cat-msg" class="hint"></p>
+    </div>
+    <div class="card">
+      <h2>Productos <small id="cat-count" class="muted"></small></h2>
+      <div class="toolbar">
+        <input id="cat-search" placeholder="Buscar código, descripción, proveedor…">
+        <select id="cat-filter-cat"><option value="">Todas las categorías</option></select>
+        <span class="spacer"></span>
+        <button id="btn-cat-add" class="ghost">+ Nuevo producto</button>
+      </div>
+      <div class="table-wrap">
+        <table class="list editable">
+          <thead><tr><th>Código</th><th>Descripción</th><th>Categoría</th><th>Proveedor</th><th>Unidad</th><th>Marca</th><th>Costo</th><th>IVA %</th><th>Sinónimos</th><th></th></tr></thead>
+          <tbody id="cat-body"></tbody>
+        </table>
+      </div>
+      <div class="pager"><button id="cat-prev" class="ghost">‹</button><span id="cat-page"></span><button id="cat-next" class="ghost">›</button></div>
+    </div>
+  </section>
+
+  <!-- ===================== CLIENTES ===================== -->
+  <section id="tab-clientes" class="panel">
+    <div class="card">
+      <h2>Clientes y factores de precio</h2>
+      <p class="muted">Cada cliente puede tener su factor general, un factor por categoría (área) y los factores recordados por producto
+        (se guardan solos al guardar una cotización). Prioridad: producto → categoría → general del cliente → factor global.</p>
+      <div class="toolbar"><input id="cl-search" placeholder="Buscar cliente…"><span class="spacer"></span><button id="btn-cl-add" class="ghost">+ Nuevo cliente</button></div>
+      <div class="table-wrap">
+        <table class="list">
+          <thead><tr><th>Cliente</th><th>NIT</th><th>Ciudad</th><th>Factor general</th><th>Factores por categoría</th><th>Precios recordados</th><th></th></tr></thead>
+          <tbody id="cl-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== CONFIGURACIÓN ===================== -->
+  <section id="tab-config" class="panel">
+    <div class="grid-2">
+      <div class="card">
+        <h2>Datos de la empresa (encabezado de la cotización)</h2>
+        <div class="form-grid">
+          <label class="span-2">Razón social <input id="s-nombre"></label>
+          <label>NIT <input id="s-nit"></label>
+          <label>Teléfono <input id="s-telefono"></label>
+          <label>Dirección <input id="s-direccion"></label>
+          <label>Ciudad <input id="s-ciudad"></label>
+          <label>Correo <input id="s-email"></label>
+          <label>Sitio web <input id="s-web"></label>
+          <label class="span-2">Logo (PNG o JPG)
+            <span class="logo-row"><input id="s-logo" type="file" accept="image/png,image/jpeg"><img id="s-logo-prev" alt=""><button id="s-logo-del" class="ghost">Quitar</button></span>
+          </label>
+          <label>Nombre de quien elabora <input id="s-firma"></label>
+          <label>Cargo <input id="s-cargo"></label>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Valores por defecto</h2>
+        <div class="form-grid">
+          <label>Prefijo del consecutivo <input id="s-prefijo"></label>
+          <label>Próximo consecutivo <input id="s-consecutivo" type="number" min="1"></label>
+          <label>Factor por defecto <input id="s-factor" type="number" min="0.01" max="1" step="0.01" list="dl-factores"></label>
+          <label>IVA por defecto (%) <input id="s-iva" type="number" min="0" max="100"></label>
+          <label>Validez (días) <input id="s-validez" type="number" min="1"></label>
+          <label>Redondeo <select id="s-redondeo"><option value="0">Sin redondeo</option><option value="1">$1</option><option value="10">$10</option><option value="50">$50</option><option value="100">$100</option><option value="1000">$1.000</option></select></label>
+          <label class="span-2">Condiciones de pago <input id="s-pago"></label>
+          <label class="span-2">Tiempo de entrega <input id="s-entrega"></label>
+          <label class="span-2">Notas por defecto <textarea id="s-notas" rows="2"></textarea></label>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Lectura con IA (opcional)</h2>
+        <p class="muted">Mejora mucho la lectura de fotos, letra a mano y PDF escaneados. Necesita una API key de Anthropic
+          (console.anthropic.com). La clave queda guardada solo en este navegador y no se incluye en las copias de seguridad.</p>
+        <div class="form-grid">
+          <label class="span-2">API key <input id="s-apikey" type="password" placeholder="sk-ant-…" autocomplete="off"></label>
+          <label class="span-2">Modelo <input id="s-model"></label>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Copia de seguridad</h2>
+        <p class="muted">Los datos se guardan en este navegador. Exporte una copia con frecuencia o para pasar los datos a otro equipo.</p>
+        <div class="row-actions">
+          <button id="btn-backup">Exportar copia (.json)</button>
+          <label class="button ghost">Restaurar copia <input id="backup-file" type="file" accept=".json" hidden></label>
+        </div>
+        <p class="muted">Homologaciones aprendidas: <b id="alias-count">0</b> <button id="btn-alias-clear" class="ghost small">Olvidar</button></p>
+      </div>
+    </div>
+    <div class="row-actions"><span class="spacer"></span><button id="btn-settings-save" class="primary">Guardar configuración</button></div>
+  </section>
+</main>
+
+<!-- Diálogos -->
+<dialog id="dlg-approve">
+  <form method="dialog">
+    <h3>Aprobar cotización</h3>
+    <p class="muted">Al aprobarla, el PDF sale sin la marca "BORRADOR" y con el sello de aprobación.</p>
+    <label>Aprobado por * <input id="ap-nombre" required></label>
+    <label>Cargo <input id="ap-cargo"></label>
+    <div class="row-actions"><span class="spacer"></span><button value="cancel" formnovalidate class="ghost">Cancelar</button><button value="ok" class="success">Aprobar y descargar PDF</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-client">
+  <form method="dialog">
+    <h3>Cliente</h3>
+    <div class="form-grid">
+      <label class="span-2">Nombre * <input id="dc-nombre" required></label>
+      <label>NIT / CC <input id="dc-nit"></label>
+      <label>Ciudad <input id="dc-ciudad"></label>
+      <label>Contacto <input id="dc-contacto"></label>
+      <label>Teléfono <input id="dc-telefono"></label>
+      <label class="span-2">Correo <input id="dc-email"></label>
+      <label>Factor general <input id="dc-factor" type="number" min="0.01" max="1" step="0.01" list="dl-factores" placeholder="Usa el global"></label>
+    </div>
+    <h4>Factor por categoría</h4>
+    <div id="dc-cats" class="cat-factors"></div>
+    <div class="row-actions">
+      <button type="button" id="dc-clear-prices" class="ghost">Olvidar precios recordados</button>
+      <span class="spacer"></span><button value="cancel" formnovalidate class="ghost">Cancelar</button><button value="ok" class="primary">Guardar</button>
+    </div>
+  </form>
+</dialog>
+
+<datalist id="dl-clientes"></datalist>
+<datalist id="dl-productos"></datalist>
+<datalist id="dl-factores"></datalist>
+<div id="toast" class="toast"></div>
+
+<!-- Librerías -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.13.0/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@4.2.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@5.0.8/dist/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js"></script>
+
+<script src="js/matcher.js"></script>
+<script src="js/parsers.js"></script>
+<script src="js/demo-data.js"></script>
+<script src="js/store.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/exporters.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
