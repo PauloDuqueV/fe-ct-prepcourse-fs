@@ -13,7 +13,7 @@ CÓMO ABRIRLO (forma más fácil)
 PRIMERA VEZ (una sola vez)
 1. Configuración: complete NIT, dirección, teléfono, correo y quien elabora. Clic en "Guardar configuración".
 2. Catálogo: elija su archivo de Excel de proveedor > "Importar".
-   Si el archivo no trae IVA (ej. reactivos), escriba el IVA en la casilla "IVA %".
+   Si un producto no trae IVA en el archivo (ej. reactivos de química), se toma como 0 %.
 3. (Opcional) Clientes: defina el factor de cada cliente y por categoría.
 
 PARA COTIZAR

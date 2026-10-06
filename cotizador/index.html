@@ -179,7 +179,7 @@
         <label>Archivo <input id="cat-file" type="file" accept=".xlsx,.xls,.csv,.ods"></label>
         <label>Proveedor (si el archivo no lo trae) <input id="cat-prov" placeholder="Opcional"></label>
         <label>Categoría (si el archivo no la trae) <input id="cat-cat" placeholder="Opcional: por defecto, la hoja o sección"></label>
-        <label>IVA % (si el archivo no lo trae) <input id="cat-iva" type="number" min="0" max="100" placeholder="Por defecto el de Configuración"></label>
+        <label>IVA % (si el archivo no lo trae) <input id="cat-iva" type="number" min="0" max="100" placeholder="0 (sin IVA)"></label>
         <label>Modo
           <select id="cat-mode">
             <option value="merge">Actualizar existentes y agregar nuevos (por código)</option>
@@ -259,7 +259,6 @@
           <label>Prefijo del consecutivo <input id="s-prefijo"></label>
           <label>Próximo consecutivo <input id="s-consecutivo" type="number" min="1"></label>
           <label>Factor por defecto <input id="s-factor" type="number" min="0.01" max="1" step="0.01" list="dl-factores"></label>
-          <label>IVA por defecto (%) <input id="s-iva" type="number" min="0" max="100"></label>
           <label>Validez (días) <input id="s-validez" type="number" min="1"></label>
           <label>Redondeo <select id="s-redondeo"><option value="0">Sin redondeo</option><option value="1">$1</option><option value="10">$10</option><option value="50">$50</option><option value="100">$100</option><option value="1000">$1.000</option></select></label>
           <label class="span-2">Condiciones de pago <input id="s-pago"></label>
@@ -345,7 +344,7 @@
       <label>Proveedor <input id="dp-proveedor"></label>
       <label>Presentación / unidad <input id="dp-unidad" placeholder="Caja x 100, Frasco 500 ml…"></label>
       <label>Marca <input id="dp-marca"></label>
-      <label>IVA % <input id="dp-iva" type="number" min="0" max="100"></label>
+      <label>IVA % <input id="dp-iva" type="number" min="0" max="100" placeholder="0 si no tiene IVA"></label>
       <label>Sinónimos (cómo lo piden) <input id="dp-sinonimos"></label>
     </div>
     <label class="check"><input type="checkbox" id="dp-guardar" checked> Guardar en el catálogo</label>

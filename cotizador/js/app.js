@@ -92,7 +92,7 @@
       id: uid(), solicitado: req ? req.texto : '', cantidad: req ? req.cantidad : 1, unidadSolicitada: req ? req.unidad : '',
       nota: req && req.nota ? String(req.nota) : '', cantidadOriginal: req ? req.cantidad : 1, qtyManual: false,
       marcaPedida: '', presentacion: '',
-      codigo: '', descripcion: '', unidad: '', marca: '', categoria: '', costo: 0, iva: settings.ivaDefault,
+      codigo: '', descripcion: '', unidad: '', marca: '', categoria: '', costo: 0, iva: 0,
       factor: globalFactor(), factorSrc: 'global', factorManual: false,
       confianza: 0, alternativas: [], incluir: false
     };
@@ -105,7 +105,7 @@
     }
     it.codigo = p.codigo; it.descripcion = p.descripcion; it.unidad = p.unidad || ''; it.marca = p.marca || '';
     it.categoria = p.categoria || ''; it.costo = Number(p.costo) || 0;
-    it.iva = p.iva != null && p.iva !== '' ? Number(p.iva) : settings.ivaDefault;
+    it.iva = p.iva != null && p.iva !== '' ? Number(p.iva) : 0; // producto sin IVA registrado = 0 %
     if (conf != null) it.confianza = conf;
     if (!it.factorManual) { var r = resolveFactor(p); it.factor = r.f; it.factorSrc = r.src; }
     it.incluir = true;
@@ -677,7 +677,7 @@
     var wb = XLSX.read(await Parsers.readAsArrayBuffer(f), { type: 'array' });
     var ivaTxt = $('#cat-iva').value.trim();
     var opts = { proveedor: $('#cat-prov').value.trim(), categoria: $('#cat-cat').value.trim(),
-      ivaDefault: ivaTxt === '' ? settings.ivaDefault : Number(ivaTxt) };
+      ivaDefault: ivaTxt === '' ? 0 : Number(ivaTxt) }; // si el archivo no trae IVA, el producto no tiene IVA
     var incoming = [], resumen = [];
     wb.SheetNames.forEach(function (sn) {
       var rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, raw: true, defval: '' });
@@ -761,7 +761,7 @@
     $('#cat-prev').addEventListener('click', function () { if (catPage > 0) { catPage--; renderCatalog(); } });
     $('#cat-next').addEventListener('click', function () { if ((catPage + 1) * PAGE < catRows.length) { catPage++; renderCatalog(); } });
     $('#btn-cat-add').addEventListener('click', function () {
-      products.unshift({ codigo: 'NUEVO-' + String(products.length + 1).padStart(4, '0'), descripcion: '', categoria: '', proveedor: '', unidad: '', marca: '', costo: 0, iva: settings.ivaDefault, sinonimos: '' });
+      products.unshift({ codigo: 'NUEVO-' + String(products.length + 1).padStart(4, '0'), descripcion: '', categoria: '', proveedor: '', unidad: '', marca: '', costo: 0, iva: 0, sinonimos: '' });
       $('#cat-search').value = ''; catPage = 0; saveProducts();
       var inp = $('#cat-body tr:first-child input[data-f="descripcion"]'); if (inp) inp.focus();
     });
@@ -793,7 +793,7 @@
     $('#dp-codigo').value = nextManualCode();
     $('#dp-descripcion').value = it.solicitado ? it.solicitado.toUpperCase() : '';
     $('#dp-categoria').value = ''; $('#dp-proveedor').value = ''; $('#dp-unidad').value = '';
-    $('#dp-marca').value = it.nota || ''; $('#dp-costo').value = ''; $('#dp-iva').value = settings.ivaDefault;
+    $('#dp-marca').value = it.nota || ''; $('#dp-costo').value = ''; $('#dp-iva').value = '';
     $('#dp-sinonimos').value = it.solicitado || '';
     $('#dp-guardar').checked = true;
     $('#dlg-product').showModal();
@@ -806,7 +806,7 @@
         codigo: $('#dp-codigo').value.trim() || nextManualCode(), descripcion: $('#dp-descripcion').value.trim(),
         categoria: $('#dp-categoria').value.trim(), proveedor: $('#dp-proveedor').value.trim(), unidad: $('#dp-unidad').value.trim(),
         marca: $('#dp-marca').value.trim(), costo: parseFloat($('#dp-costo').value) || 0,
-        iva: $('#dp-iva').value === '' ? settings.ivaDefault : Number($('#dp-iva').value), sinonimos: $('#dp-sinonimos').value.trim()
+        iva: $('#dp-iva').value === '' ? 0 : Number($('#dp-iva').value), sinonimos: $('#dp-sinonimos').value.trim()
       };
       if (!p.descripcion) return;
       if ($('#dp-guardar').checked) {
@@ -884,7 +884,7 @@
   // ---------- configuración ----------
   var S_MAP = { nombre: 'empresa.nombre', nit: 'empresa.nit', telefono: 'empresa.telefono', direccion: 'empresa.direccion', ciudad: 'empresa.ciudad',
     email: 'empresa.email', web: 'empresa.web', firma: 'firmaNombre', cargo: 'firmaCargo', prefijo: 'prefijo', consecutivo: 'consecutivo',
-    factor: 'factorDefault', iva: 'ivaDefault', validez: 'validezDias', redondeo: 'redondeo', pago: 'condicionesPago', entrega: 'tiempoEntrega',
+    factor: 'factorDefault', validez: 'validezDias', redondeo: 'redondeo', pago: 'condicionesPago', entrega: 'tiempoEntrega',
     notas: 'notas', apikey: 'apiKey', model: 'aiModel', equiv: 'equivalencias', packs: 'presentaciones' };
   function getPath(o, p) { return p.split('.').reduce(function (a, k) { return a && a[k]; }, o); }
   function setPath(o, p, v) { var ks = p.split('.'), last = ks.pop(); ks.reduce(function (a, k) { return a[k]; }, o)[last] = v; }
@@ -902,7 +902,7 @@
     $('#btn-settings-save').addEventListener('click', function () {
       Object.keys(S_MAP).forEach(function (k) {
         var v = $('#s-' + k).value;
-        if (['consecutivo', 'iva', 'validez', 'redondeo'].indexOf(k) >= 0) v = Number(v) || 0;
+        if (['consecutivo', 'validez', 'redondeo'].indexOf(k) >= 0) v = Number(v) || 0;
         if (k === 'factor') v = clampFactor(v) || 0.75;
         if (k === 'apikey') v = v.trim();
         setPath(settings, S_MAP[k], v);
@@ -954,21 +954,26 @@
    * sin borrar ni cambiar los que el usuario ya tenga (registrados a mano o importados).
    * Se ejecuta una vez por versión del catálogo incluido, o cuando el usuario lo pide.
    */
+  var seedIvaFixed = false;
   function loadSeedCatalog(force) {
     var seed = window.SEED_CATALOG;
     if (!Array.isArray(seed) || !seed.length) return false;
     var version = String(window.SEED_VERSION || seed.length);
     if (!force && Store.seedVersion() === version) return false;
-    var have = new Set(products.map(function (p) { return String(p.codigo).toUpperCase(); }));
-    var added = 0;
+    var byCode = new Map(products.map(function (p) { return [String(p.codigo).toUpperCase(), p]; }));
+    var added = 0, ivaFixed = 0;
     seed.forEach(function (p) {
-      if (!have.has(String(p.codigo).toUpperCase())) { products.push(clone(p)); added++; }
+      var cur = byCode.get(String(p.codigo).toUpperCase());
+      if (!cur) { products.push(clone(p)); added++; }
+      else if (Number(cur.iva) !== Number(p.iva)) { cur.iva = p.iva; ivaFixed++; } // la versión nueva corrige el IVA
     });
     Store.saveProducts(products);
     Store.saveSeedVersion(version);
     if (added || force) {
       setTimeout(function () { toast('Catálogo MEDITIENDA: ' + added + ' productos agregados (total ' + products.length + ').'); }, 400);
     }
+    if (ivaFixed) setTimeout(function () { toast('Catálogo MEDITIENDA actualizado: IVA corregido en ' + ivaFixed + ' productos.'); }, 3600);
+    seedIvaFixed = ivaFixed > 0;
     return added > 0;
   }
 
@@ -987,6 +992,11 @@
     setGlobalFactor(settings.factorDefault, true);
     quoteToForm();
     if (seeded && quote.items.some(function (i) { return i.solicitado && !i.codigo; })) rematchAll();
+    if (seedIvaFixed) {
+      // la cotización en curso toma el IVA corregido del catálogo
+      quote.items.forEach(function (it) { var p = findProduct(it.codigo); if (p) it.iva = Number(p.iva) || 0; });
+      renderItems(); Store.saveDraft(quote);
+    }
 
     $$('.tab').forEach(function (t) { t.addEventListener('click', function () { showTab(t.dataset.tab); }); });
     bindItems(); bindClient(); bindInput(); bindActions(); bindHistory(); bindCatalog(); bindClients(); bindSettings(); bindProductDialog();

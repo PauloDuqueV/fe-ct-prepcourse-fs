@@ -94,7 +94,7 @@
         unidad: unidad,
         marca: map.marca != null ? clean(r[map.marca]) : '',
         costo: costo,
-        iva: map.iva != null && parseIva(r[map.iva]) != null ? parseIva(r[map.iva]) : (opts.ivaDefault != null ? opts.ivaDefault : 19),
+        iva: map.iva != null && parseIva(r[map.iva]) != null ? parseIva(r[map.iva]) : (opts.ivaDefault != null ? opts.ivaDefault : 0), // sin IVA registrado = 0 %
         sinonimos: map.sinonimos != null ? clean(r[map.sinonimos]) : ''
       };
       if (/^\d+$/.test(rend)) p.unidad = (p.unidad ? p.unidad + ' · ' : '') + rend + ' pruebas';
