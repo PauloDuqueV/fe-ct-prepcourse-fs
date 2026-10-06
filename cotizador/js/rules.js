@@ -113,14 +113,13 @@
     } else if (req.pack && prod.pack && req.pack !== prod.pack) {
       newQty = Math.max(1, Math.ceil(qty * req.pack / prod.pack - 1e-9));
       notes.push('Pide presentación x ' + req.pack + ', se ofrece x ' + prod.pack + (newQty !== qty ? ' → cantidad ' + qty + ' → ' + newQty : ''));
-    } else if (pack && ((!unit && qty > pack) || (LOOSE_UNITS.test(unit) && qty >= pack))) {
-      // Más unidades que las de una caja: son unidades sueltas -> cajas completas (siempre hacia arriba)
+    } else if (pack && (!unit || LOOSE_UNITS.test(unit)) && qty >= pack) {
+      // Desde las unidades de una caja (100 tubos) son unidades sueltas -> cajas completas (siempre hacia arriba).
+      // Menos de eso se toma como cajas.
       newQty = Math.ceil(qty / pack);
       var n = qty + ' ' + (unit || 'unidades') + ' → ' + newQty + ' × caja de ' + pack;
       if (qty % pack) n += ' · no es múltiplo de ' + pack + ': se redondea a ' + newQty * pack + ' unidades';
       notes.push(n);
-    } else if (pack && !unit && qty === pack) {
-      notes.push('¿' + qty + ' cajas o 1 caja de ' + pack + ' unidades? Verifique');
     }
 
     if (req.ml && prod.ml && Math.abs(req.ml - prod.ml) / req.ml > 0.05) {
@@ -186,7 +185,8 @@
 
   var DEFAULT_PACKS = [
     '# Unidades por caja cuando la descripción del producto no lo dice:  palabra(s) = unidades',
-    '# Si el cliente pide más que eso, se toma como unidades sueltas y se convierte a cajas (hacia arriba).',
+    '# Si el cliente pide esa cantidad o más, son unidades sueltas y se convierten a cajas (hacia arriba);',
+    '# si pide menos, se toma como cajas.',
     'tubo = 100'
   ].join('\n');
 

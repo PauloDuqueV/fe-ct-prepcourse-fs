@@ -155,7 +155,9 @@ describe('tubos en caja x 100', () => {
   const lila = { descripcion: 'TUBO TAPA LILA EDTA K2 13X75MM X 4ML' };
   const q = (cantidad, unidad) => Rules.adjustQuantity({ texto: 'tubo tapa lila 4ml', cantidad, unidad }, lila, packs);
 
-  test('más de 100 sin unidad son unidades sueltas: se convierten a cajas', () => {
+  test('desde 100 sin unidad son unidades sueltas: se convierten a cajas', () => {
+    expect(q(100)).toEqual({ cantidad: 1, presentacion: '100 unidades → 1 × caja de 100' });
+    expect(q(99).cantidad).toBe(99);
     expect(q(1000).cantidad).toBe(10);
     expect(q(1500).cantidad).toBe(15);
   });
