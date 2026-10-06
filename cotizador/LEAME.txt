@@ -1,11 +1,12 @@
 COTIZADOR MEDITIENDA - INICIO RÁPIDO
 =====================================
 
-CÓMO ABRIRLO
-1. Descomprima esta carpeta en un lugar fijo, por ejemplo en Documentos\Cotizador.
-   (Clic derecho sobre el .zip > "Extraer todo")
-2. Abra la carpeta y haga doble clic en "index.html".
-   Se abre en el navegador. Use Google Chrome o Microsoft Edge.
+CÓMO ABRIRLO (forma más fácil)
+1. Guarde el archivo "Cotizador-MEDITIENDA.html" en un lugar fijo, por ejemplo en Documentos.
+2. Haga doble clic en él. Se abre en el navegador. Use Google Chrome o Microsoft Edge.
+   Es un solo archivo: no hay que descomprimir nada.
+   (Si usa la carpeta completa, primero descomprima el .zip con clic derecho > "Extraer todo"
+   y luego abra "index.html"; si lo abre sin extraer, la página se ve sin formato.)
 3. Consejo: arrastre la pestaña a la barra de favoritos para abrirlo rápido.
    Necesita internet (para cargar las herramientas de Excel, PDF y lectura de fotos).
 

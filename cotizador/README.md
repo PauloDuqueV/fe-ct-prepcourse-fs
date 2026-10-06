@@ -29,7 +29,7 @@ El nombre del cliente es obligatorio y aparece en el Excel y en el PDF.
 
 ## Cómo usarla
 
-1. Abra `index.html` en Chrome o Edge. Necesita internet la primera vez para cargar las librerías.
+1. Abra `Cotizador-MEDITIENDA.html` (un solo archivo, con todo incluido) o `index.html` desde la carpeta ya descomprimida, en Chrome o Edge. Si cambia el código, regenere el archivo único con `python3 cotizador/build.py`. Necesita internet la primera vez para cargar las librerías.
    Para que la usen varias personas se puede publicar gratis en GitHub Pages (Settings → Pages) o en cualquier hosting estático.
 2. **Configuración:** escriba los datos de la empresa, suba el logo, el nombre de quien elabora y los valores por defecto (factor, IVA, validez, condiciones de pago, consecutivo).
 3. **Catálogo:** importe las listas de proveedores en Excel o CSV. Las columnas se reconocen aunque cambie el nombre:
