@@ -383,7 +383,12 @@
         }
         autoClient(res.rawText);
         if (res.rawText) { $('#raw-text').value = res.rawText; $('#raw-box').classList.remove('hidden'); if (isImg) $('#raw-box').open = true; }
-        if (!res.items.length) toast('No se encontraron productos en ' + file.name + '. Revise el texto leído.', true);
+        if (res.ocrDudoso) {
+          toast('La imagen ' + file.name + ' no se pudo leer bien (foto borrosa, muy pequeña o letra a mano). ' +
+            'Corrija el texto leído y pulse "Volver a procesar", o active "Leer con IA".', true);
+          $('#raw-box').open = true;
+        }
+        if (!res.items.length && !res.ocrDudoso) toast('No se encontraron productos en ' + file.name + '. Revise el texto leído.', true);
         else matchRequests(res.items, 'file:' + file.name + ':' + file.size);
       } catch (err) {
         console.error(err);

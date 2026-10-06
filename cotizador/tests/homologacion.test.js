@@ -138,3 +138,13 @@ describe('reglas comerciales', () => {
     expect(Rules.nearestPresentation('glucosa', cands)).toBe(0);
   });
 });
+
+describe('color de tapa', () => {
+  test('el color pesa más que la medida', () => {
+    const idx = Matcher.buildIndex([
+      { codigo: 'AMA', descripcion: 'TUBO TAPA AMARILLA GEL+CLOT ACTIVADOR CAJA X 100' },
+      { codigo: 'ROJ', descripcion: 'TUBO TAPA ROJA ACTIVADOR 13X75 MML X 5ML' },
+    ]);
+    expect(Matcher.match('TUBO TAPA AMARILLA 5 ML', idx)[0].product.codigo).toBe('AMA');
+  });
+});

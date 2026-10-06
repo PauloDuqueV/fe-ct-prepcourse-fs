@@ -93,6 +93,12 @@
     } else if (req.pack && prod.pack && req.pack !== prod.pack) {
       newQty = Math.max(1, Math.ceil(qty * req.pack / prod.pack - 1e-9));
       note = 'Pide presentación x ' + req.pack + ', se ofrece x ' + prod.pack + (newQty !== qty ? ' → cantidad ' + qty + ' → ' + newQty : '');
+    } else if (!unit && prod.pack && qty >= prod.pack && qty % prod.pack === 0) {
+      // "TUBO LILA 1000" sin unidad y el producto viene x 100: son unidades sueltas -> 10 cajas
+      newQty = qty / prod.pack;
+      note = qty + ' unidades → ' + newQty + ' × presentación de ' + prod.pack + ' (verifique)';
+    } else if (!unit && !prod.pack && qty >= 100 && CONTAINER.test(N(productText(product)))) {
+      note = 'Cantidad ' + qty + ': parece pedida en unidades sueltas; verifique cuántas cajas son';
     } else if (LOOSE_UNITS.test(unit) && prod.pack && qty >= prod.pack) {
       // "200 tubos" con caja x 100 -> 2 cajas
       newQty = Math.ceil(qty / prod.pack);

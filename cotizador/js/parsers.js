@@ -202,13 +202,87 @@
     return { items: parseText(text), rawText: text };
   }
 
+  /**
+   * Prepara la foto para el OCR: la agranda (las capturas pequeñas tienen letras de 8-10 px y
+   * Tesseract necesita ~30 px), la pasa a escala de grises y estira el contraste.
+   */
+  async function prepareImage(file) {
+    var url = URL.createObjectURL(file);
+    try {
+      var img = await new Promise(function (res, rej) { var i = new Image(); i.onload = function () { res(i); }; i.onerror = rej; i.src = url; });
+      var w = img.naturalWidth, h = img.naturalHeight;
+      var scale = Math.min(4, Math.max(1, 1800 / w));
+      if (w * scale > 4000) scale = 4000 / w;
+      var cv = document.createElement('canvas');
+      cv.width = Math.round(w * scale); cv.height = Math.round(h * scale);
+      var ctx = cv.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, cv.width, cv.height);
+      var data = ctx.getImageData(0, 0, cv.width, cv.height), px = data.data, lo = 255, hi = 0, i, g;
+      for (i = 0; i < px.length; i += 4) {
+        g = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+        px[i] = g; if (g < lo) lo = g; if (g > hi) hi = g;
+      }
+      var range = Math.max(1, hi - lo);
+      for (i = 0; i < px.length; i += 4) {
+        g = (px[i] - lo) * 255 / range;
+        g = g < 128 ? g * 0.6 : 255 - (255 - g) * 0.6; // más contraste
+        px[i] = px[i + 1] = px[i + 2] = g;
+      }
+      removeTableLines(px, cv.width, cv.height);
+      ctx.putImageData(data, 0, 0);
+      return cv;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  /** Borra las líneas de tablas (filas o columnas casi completamente oscuras) para que no se lean como "|" o "—". */
+  function removeTableLines(px, w, h) {
+    var x, y, dark, run, maxRun;
+    for (y = 0; y < h; y++) {
+      run = 0; maxRun = 0;
+      for (x = 0; x < w; x++) { if (px[(y * w + x) * 4] < 110) { run++; if (run > maxRun) maxRun = run; } else run = 0; }
+      if (maxRun > w * 0.3) for (x = 0; x < w; x++) { var i = (y * w + x) * 4; px[i] = px[i + 1] = px[i + 2] = 255; }
+    }
+    for (x = 0; x < w; x++) {
+      run = 0; maxRun = 0;
+      for (y = 0; y < h; y++) { if (px[(y * w + x) * 4] < 110) { run++; if (run > maxRun) maxRun = run; } else run = 0; }
+      if (maxRun > h * 0.3) for (y = 0; y < h; y++) { var j = (y * w + x) * 4; px[j] = px[j + 1] = px[j + 2] = 255; }
+    }
+  }
+
+  /** Limpia restos de bordes de tabla que el OCR lee como caracteres. */
+  function cleanOcr(t) {
+    return String(t || '').split(/\r?\n/).map(function (l) {
+      return l.replace(/[|¦\[\]{}]+/g, ' ').replace(/\s[—–_=~]+(?=\s|$)/g, ' ').replace(/[ \t]{2,}/g, '   ').trim();
+    }).join('\n');
+  }
+
+  function letters(t) { return (String(t).match(/[a-záéíóúñ]/gi) || []).length; }
+
   async function fromImage(file, onProgress) {
     var worker = await Tesseract.createWorker('spa', 1, {
       logger: function (m) { if (onProgress && m.status === 'recognizing text') onProgress(m.progress); }
     });
     try {
-      var r = await worker.recognize(file);
-      return { items: parseText(r.data.text), rawText: r.data.text };
+      var prepared = null;
+      try { prepared = await prepareImage(file); } catch (e) { prepared = null; }
+      // Intento 1: imagen preparada, bloque de texto uniforme (tablas y listas)
+      await worker.setParameters({ tessedit_pageseg_mode: '6', preserve_interword_spaces: '1' });
+      var best = cleanOcr((await worker.recognize(prepared || file)).data.text);
+      var bestItems = parseText(best);
+      // Intento 2: segmentación automática, por si la foto tiene columnas o texto disperso
+      if (bestItems.length < 2) {
+        await worker.setParameters({ tessedit_pageseg_mode: '3' });
+        var t2 = cleanOcr((await worker.recognize(prepared || file)).data.text);
+        var items2 = parseText(t2);
+        if (items2.length > bestItems.length || (items2.length === bestItems.length && letters(t2) > letters(best))) {
+          best = t2; bestItems = items2;
+        }
+      }
+      return { items: bestItems, rawText: best, ocrDudoso: bestItems.length === 0 || letters(best) < 15 };
     } finally {
       await worker.terminate();
     }

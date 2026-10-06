@@ -62,6 +62,8 @@
   // Palabras de empaque o genéricas: ayudan poco a saber QUÉ producto es
   var GENERIC = new Set(['anticuerpo', 'antigeno', 'prueba', 'rapida', 'caja', 'unidad', 'kit', 'frasco', 'paquete', 'tubo', 'sangre', 'total', 'desechable']);
 
+  var COLORS = new Set(['lila', 'roja', 'amarilla', 'azul', 'gris', 'verde', 'negra', 'celeste', 'blanca', 'naranja', 'rosada']);
+
   var QUALIFIERS = ['calibrador', 'multicalibrador', 'control', 'duo', 'ns1'];
 
   // Frases de varias palabras que equivalen a un solo término
@@ -250,13 +252,6 @@
           }
         }
 
-        // Si ninguna palabra de 3+ letras coincide (solo letras sueltas como "s" o "m"), no es este producto
-        var realHit = qWords.some(function (qt) {
-          return (qt.length >= 2 && d.tokenSet.has(qt)) || qt.length >= 3 && ( d.tokens.some(function (t) { return tokenSim(qt, t) >= 0.6; }));
-        });
-        if (qWords.length && !realHit) score *= 0.35;
-        // Controles, calibradores y kits "duo" son productos distintos al reactivo: solo si se piden
-
         // Mezcla de similitud global y de "la solicitud está contenida en la descripción"
         var inter = 0;
         qGrams.forEach(function (g) { if (d.grams.has(g)) inter++; });
@@ -268,6 +263,12 @@
           return (qt.length >= 2 && d.tokenSet.has(qt)) || qt.length >= 3 && ( d.tokens.some(function (t) { return tokenSim(qt, t) >= 0.6; }));
         });
         if (qWords.length && !realHit) score *= 0.35;
+        // Color de tapa distinto (lila vs roja): es otro producto aunque coincidan medidas
+        var qColors = qWords.filter(function (t) { return COLORS.has(t); });
+        if (qColors.length) {
+          var dColors = d.tokens.filter(function (t) { return COLORS.has(t); });
+          if (dColors.length && !qColors.some(function (c) { return dColors.indexOf(c) >= 0; })) score *= 0.5;
+        }
         // Controles, calibradores y kits "duo" son productos distintos al reactivo: solo si se piden
         QUALIFIERS.forEach(function (w) { if (d.tokenSet.has(w) && qWords.indexOf(w) < 0) score *= 0.85; });
       }
