@@ -1,0 +1,36 @@
+COTIZADOR MEDITIENDA - INICIO RÁPIDO
+=====================================
+
+CÓMO ABRIRLO
+1. Descomprima esta carpeta en un lugar fijo, por ejemplo en Documentos\Cotizador.
+   (Clic derecho sobre el .zip > "Extraer todo")
+2. Abra la carpeta y haga doble clic en "index.html".
+   Se abre en el navegador. Use Google Chrome o Microsoft Edge.
+3. Consejo: arrastre la pestaña a la barra de favoritos para abrirlo rápido.
+   Necesita internet (para cargar las herramientas de Excel, PDF y lectura de fotos).
+
+PRIMERA VEZ (una sola vez)
+1. Configuración: complete NIT, dirección, teléfono, correo y quien elabora. Clic en "Guardar configuración".
+2. Catálogo: elija su archivo de Excel de proveedor > "Importar".
+   Si el archivo no trae IVA (ej. reactivos), escriba el IVA en la casilla "IVA %".
+3. (Opcional) Clientes: defina el factor de cada cliente y por categoría.
+
+PARA COTIZAR
+1. Pestaña "Cotizar": escriba el nombre del cliente (o se llena solo si el mensaje dice "COTIZAR A ...").
+2. Pegue el mensaje de WhatsApp y clic en "Procesar texto",
+   o arrastre la foto / Excel / Word / PDF al recuadro.
+3. Revise las líneas:
+     verde  = correcto
+     naranja = revisar y confirmar con el botón ✓
+     rojo   = no está en el catálogo: "+ Registrar producto" o quitar la línea
+     fondo naranja claro = marca distinta a la pedida
+     fondo azul claro    = presentación ajustada (se cambió la cantidad)
+4. Ponga el factor (ej. 0.70) y "Aplicar a todos", o cámbielo en cada línea.
+5. "Guardar" > "Excel modificable" o "PDF".
+6. "Aprobar" (nombre de quien aprueba) > descarga el PDF final sin la marca BORRADOR.
+
+IMPORTANTE
+- La información (catálogo, clientes, cotizaciones) queda guardada en ESE navegador de ESE computador.
+- Haga copia de seguridad seguido: Configuración > "Exportar copia (.json)".
+  Para pasar la información a otro computador: allá use "Restaurar copia".
+- No borre los datos de navegación del navegador sin tener una copia.

@@ -67,7 +67,7 @@
     var ws = wb.addWorksheet('Cotización', { pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
     var calc = wb.addWorksheet('Cálculo interno');
     var items = included(q);
-    var blue = 'FF1F4E79', light = 'FFDCE6F1';
+    var blue = 'FF0D3A5C', light = 'FFDDF0F4';
     var border = { top: { style: 'thin', color: { argb: 'FFB0B0B0' } }, bottom: { style: 'thin', color: { argb: 'FFB0B0B0' } },
       left: { style: 'thin', color: { argb: 'FFB0B0B0' } }, right: { style: 'thin', color: { argb: 'FFB0B0B0' } } };
     var moneyFmt = '"$"#,##0';
@@ -84,7 +84,7 @@
       } catch (e) { /* logo opcional */ }
     }
     ws.mergeCells('A1:G1'); ws.getCell('A1').value = emp.nombre; ws.getCell('A1').font = { bold: true, size: 16, color: { argb: blue } };
-    ws.mergeCells('A2:G2'); ws.getCell('A2').value = 'NIT: ' + emp.nit;
+    ws.mergeCells('A2:G2'); ws.getCell('A2').value = emp.nit ? 'NIT: ' + emp.nit : (emp.lema || '');
     ws.mergeCells('A3:G3'); ws.getCell('A3').value = [emp.direccion, emp.ciudad].filter(Boolean).join(' - ');
     ws.mergeCells('A4:G4'); ws.getCell('A4').value = [emp.telefono && 'Tel: ' + emp.telefono, emp.email, emp.web].filter(Boolean).join('  |  ');
 
@@ -161,7 +161,7 @@
       row.eachCell({ includeEmpty: true }, function (cell, col) {
         if (col <= 10) {
           cell.border = border;
-          if (i % 2) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F8FC' } };
+          if (i % 2) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F8FA' } };
         }
       });
     });
@@ -223,7 +223,7 @@
     var emp = settings.empresa;
     var W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
     var M = 14;
-    var blue = [31, 78, 121];
+    var blue = [13, 58, 92], teal = [15, 127, 168], green = [31, 154, 122];
     var aprobada = q.estado === 'aprobada';
 
     function header() {
@@ -239,10 +239,10 @@
       doc.setTextColor(blue[0], blue[1], blue[2]); doc.setFont('helvetica', 'bold'); doc.setFontSize(14);
       doc.text(emp.nombre || '', x, 15);
       doc.setTextColor(60); doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5);
-      doc.text(['NIT: ' + (emp.nit || ''), [emp.direccion, emp.ciudad].filter(Boolean).join(' - '),
+      doc.text([emp.nit ? 'NIT: ' + emp.nit : emp.lema || '', [emp.direccion, emp.ciudad].filter(Boolean).join(' - '),
         [emp.telefono && 'Tel: ' + emp.telefono, emp.email, emp.web].filter(Boolean).join('  |  ')].filter(Boolean), x, 20);
 
-      doc.setFillColor(blue[0], blue[1], blue[2]);
+      doc.setFillColor(teal[0], teal[1], teal[2]);
       doc.roundedRect(W - M - 62, 9, 62, 20, 2, 2, 'F');
       doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
       doc.text('COTIZACIÓN', W - M - 31, 16, { align: 'center' });
@@ -251,6 +251,9 @@
     }
 
     header();
+    // franja de marca: azul -> verde
+    doc.setFillColor(teal[0], teal[1], teal[2]); doc.rect(M, 31.5, (W - 2 * M) / 2, 1, 'F');
+    doc.setFillColor(green[0], green[1], green[2]); doc.rect(M + (W - 2 * M) / 2, 31.5, (W - 2 * M) / 2, 1, 'F');
     var y = 36;
     doc.setDrawColor(200); doc.setFillColor(245, 248, 252);
     doc.roundedRect(M, y, W - 2 * M, 22, 2, 2, 'FD');
@@ -281,8 +284,8 @@
       rowPageBreak: 'avoid',
       margin: { left: M, right: M, top: 36 },
       styles: { fontSize: 8, cellPadding: 1.6, valign: 'middle' },
-      headStyles: { fillColor: blue, textColor: 255, halign: 'center' },
-      alternateRowStyles: { fillColor: [245, 248, 252] },
+      headStyles: { fillColor: teal, textColor: 255, halign: 'center' },
+      alternateRowStyles: { fillColor: [242, 248, 250] },
       columnStyles: {
         0: { halign: 'center', cellWidth: 8 }, 1: { cellWidth: 22 }, 3: { cellWidth: 24 }, 4: { halign: 'right', cellWidth: 12 },
         5: { halign: 'right', cellWidth: 24 }, 6: { halign: 'center', cellWidth: 11 }, 7: { halign: 'right', cellWidth: 26 }
@@ -300,7 +303,7 @@
       margin: { left: W - M - 70, right: M },
       styles: { fontSize: 9.5, cellPadding: 1.4 },
       columnStyles: { 0: { fontStyle: 'bold', halign: 'right' }, 1: { halign: 'right', fontStyle: 'bold' } },
-      didParseCell: function (d) { if (d.row.index === 2) { d.cell.styles.fillColor = [220, 230, 241]; d.cell.styles.fontSize = 11; } }
+      didParseCell: function (d) { if (d.row.index === 2) { d.cell.styles.fillColor = [221, 240, 244]; d.cell.styles.fontSize = 11; } }
     });
 
     var cond = [

@@ -4,8 +4,9 @@
   --text: #1d2733;
   --muted: #6b7785;
   --line: #dde3ea;
-  --primary: #1f4e79;
-  --primary-2: #2d6aa3;
+  --primary: #0d3a5c;   /* azul marino MEDITIENDA */
+  --primary-2: #0f7fa8; /* azul petróleo MEDITIENDA */
+  --accent: #1f9a7a;    /* verde MEDITIENDA */
   --success: #2e7d32;
   --danger: #c62828;
   --warn: #ef8f00;
@@ -16,7 +17,7 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #12161b; --card: #1b2129; --text: #e6ebf0; --muted: #9aa6b2; --line: #2d3540;
-    --primary: #4c8fd0; --primary-2: #6aa6e0; --input: #12161b; --row-alt: #1f262f;
+    --primary: #2a8fb8; --primary-2: #4fb3d6; --accent: #3cc199; --input: #12161b; --row-alt: #1f262f;
   }
 }
 * { box-sizing: border-box; }
@@ -29,13 +30,14 @@ small.muted { font-weight: normal; }
 .hidden { display: none !important; }
 
 .topbar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 24px; padding: 0 20px;
-  background: var(--primary); color: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.15); flex-wrap: wrap; }
+  background: linear-gradient(90deg, #0d3a5c 0%, #0f7fa8 70%, #1f9a7a 100%); color: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.15); flex-wrap: wrap; }
+.brand-badge { background: #fff; border-radius: 8px; padding: 3px 8px; display: inline-flex; align-items: center; }
+.brand-badge img { height: 30px; display: block; }
 .brand { font-weight: 700; font-size: 16px; display: flex; align-items: center; gap: 8px; padding: 12px 0; }
-.logo-dot { width: 12px; height: 12px; border-radius: 50%; background: #7fd1ff; }
 .tabs { display: flex; gap: 2px; overflow-x: auto; }
 .tab { background: transparent; border: 0; color: rgba(255,255,255,.75); padding: 14px 14px; cursor: pointer; font-size: 14px; border-bottom: 3px solid transparent; border-radius: 0; }
 .tab:hover { color: #fff; background: rgba(255,255,255,.06); }
-.tab.active { color: #fff; border-bottom-color: #7fd1ff; font-weight: 600; }
+.tab.active { color: #fff; border-bottom-color: #8fe3c6; font-weight: 600; }
 
 main { max-width: 1400px; margin: 0 auto; padding: 16px; }
 .panel { display: none; }
@@ -45,7 +47,7 @@ main { max-width: 1400px; margin: 0 auto; padding: 16px; }
 .grid-2 > .card { margin-bottom: 0; }
 .grid-2 + .card, .grid-2 + .row-actions { margin-top: 16px; }
 @media (max-width: 520px) { .grid-2 { grid-template-columns: 1fr; } }
-.step { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color: #fff; font-size: 13px; }
+.step { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 13px; }
 
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
 .form-grid.cols-3 { grid-template-columns: repeat(3, 1fr); }

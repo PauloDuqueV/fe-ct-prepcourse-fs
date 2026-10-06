@@ -841,7 +841,7 @@
     Object.keys(S_MAP).forEach(function (k) { var v = getPath(settings, S_MAP[k]); $('#s-' + k).value = v == null ? '' : v; });
     $('#s-logo-prev').src = settings.empresa.logo || '';
     $('#alias-count').textContent = Object.keys(aliases).length;
-    $('#brand-name').textContent = 'Cotizador · ' + settings.empresa.nombre;
+    $('#brand-name').textContent = 'Cotizador de ' + settings.empresa.nombre;
     $('#ai-status').textContent = settings.apiKey ? '' : '(configure la API key en Configuración)';
     $('#use-ai').disabled = !settings.apiKey;
   }

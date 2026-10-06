@@ -20,7 +20,8 @@
   }
 
   var DEFAULT_SETTINGS = {
-    empresa: { nombre: 'Mi Empresa S.A.S.', nit: '900.000.000-0', direccion: '', ciudad: '', telefono: '', email: '', web: '', logo: '' },
+    empresa: { nombre: (root.BRAND && root.BRAND.nombre) || 'Mi Empresa S.A.S.', nit: '', direccion: '', ciudad: '', telefono: '',
+      email: '', web: '', lema: (root.BRAND && root.BRAND.lema) || '', logo: (root.BRAND && root.BRAND.logo) || '' },
     consecutivo: 1,
     prefijo: 'COT-',
     validezDias: 15,
