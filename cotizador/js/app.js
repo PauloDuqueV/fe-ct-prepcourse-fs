@@ -14,7 +14,7 @@
   var productByCode = new Map();
   var quote = null;
 
-  var CONF_HIGH = 0.7, CONF_MIN = 0.45;
+  var CONF_HIGH = 0.7, CONF_MIN = 0.4;
 
   // ---------- utilidades ----------
   function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
@@ -84,6 +84,7 @@
   function newItem(req) {
     return {
       id: uid(), solicitado: req ? req.texto : '', cantidad: req ? req.cantidad : 1, unidadSolicitada: req ? req.unidad : '',
+      nota: req && req.nota ? String(req.nota) : '',
       codigo: '', descripcion: '', unidad: '', marca: '', categoria: '', costo: 0, iva: settings.ivaDefault,
       factor: globalFactor(), factorSrc: 'global', factorManual: false,
       confianza: 0, alternativas: [], incluir: false
@@ -147,7 +148,8 @@
       tr.innerHTML =
         '<td><input type="checkbox" class="inc"' + (it.incluir ? ' checked' : '') + '></td>' +
         '<td>' + (i + 1) + ' <span class="conf ' + confClass(it) + '" title="Confianza ' + Math.round((it.confianza || 0) * 100) + '%">●</span></td>' +
-        '<td class="req-text">' + (it.solicitado ? '<span class="req-qty">' + esc(it.cantidad) + ' ' + esc(it.unidadSolicitada || '') + '</span> ' + esc(it.solicitado) : '<span class="muted">(agregado manualmente)</span>') + '</td>' +
+        '<td class="req-text">' + (it.solicitado ? '<span class="req-qty">' + esc(it.cantidad) + ' ' + esc(it.unidadSolicitada || '') + '</span> ' + esc(it.solicitado) : '<span class="muted">(agregado manualmente)</span>') +
+          (it.nota ? '<div class="req-note" title="Requisito / marca indicada por el cliente">Pide: ' + esc(it.nota) + '</div>' : '') + '</td>' +
         '<td><input class="prod" list="dl-productos" placeholder="Buscar producto por código o nombre…" value="' + esc(it.codigo ? it.codigo + ' — ' + it.descripcion : '') + '">' +
           '<div class="prod-meta">' + esc([it.unidad, it.marca, it.categoria].filter(Boolean).join(' · ')) + '</div>' +
           (alts ? '<div class="alts"><span class="muted" style="font-size:11px">¿Otro?</span>' + alts + '</div>' : '') + '</td>' +
@@ -157,7 +159,8 @@
         '<td class="num c-precio"></td>' +
         '<td><input class="iva" type="number" min="0" max="100" value="' + esc(it.iva) + '"></td>' +
         '<td class="num c-total"></td>' +
-        '<td><button class="icon del" title="Quitar línea">✕</button></td>';
+        '<td>' + (it.codigo && it.confianza < CONF_HIGH ? '<button class="small ok-btn" title="Confirmar que este producto es el correcto">✓</button> ' : '') +
+        '<button class="icon del" title="Quitar línea">✕</button></td>';
       body.appendChild(tr);
       updateRow(tr, it);
     });
@@ -228,7 +231,9 @@
     body.addEventListener('click', function (e) {
       var r = itemFromEvent(e), it = r.it;
       if (!it) return;
-      if (e.target.classList.contains('del')) {
+      if (e.target.classList.contains('ok-btn')) {
+        it.confianza = 1; renderItems(); touched();
+      } else if (e.target.classList.contains('del')) {
         quote.items = quote.items.filter(function (x) { return x !== it; });
         renderItems(); touched();
       } else if (e.target.classList.contains('alt')) {
@@ -335,6 +340,7 @@
         } else {
           res = await Parsers.fromFile(file, function (p) { progress(p, 'Reconociendo texto (OCR) de ' + file.name + '… ' + Math.round(p * 100) + '%'); });
         }
+        autoClient(res.rawText);
         if (res.rawText) { $('#raw-text').value = res.rawText; $('#raw-box').classList.remove('hidden'); if (isImg) $('#raw-box').open = true; }
         if (!res.items.length) toast('No se encontraron productos en ' + file.name + '. Revise el texto leído.', true);
         else matchRequests(res.items);
@@ -346,8 +352,21 @@
     progress(null);
   }
 
+  /** Si el mensaje dice "COTIZAR A CELSALUD ISTMINA" y aún no hay cliente, lo llena. */
+  function autoClient(text) {
+    if (quote.cliente.nombre || !text) return;
+    var name = Parsers.detectClient(text);
+    if (!name) return;
+    var known = findClient(name);
+    quote.cliente.nombre = known ? known.nombre : name;
+    $('#c-nombre').value = quote.cliente.nombre;
+    $('#c-nombre').dispatchEvent(new Event('change'));
+    toast('Cliente detectado en la solicitud: ' + quote.cliente.nombre + '. Verifique el nombre.');
+  }
+
   async function processText(text) {
     if (!text.trim()) { toast('Pegue primero el texto de la solicitud.', true); return; }
+    autoClient(text);
     try {
       if (useAI()) {
         progress(0.4, 'La IA está interpretando el mensaje…');
@@ -464,6 +483,9 @@
     if (!inc.length) { toast('No hay productos marcados para cotizar.', true); return false; }
     var bad = inc.filter(function (i) { return !(i.factor > 0 && i.factor <= 1); });
     if (bad.length) { toast('Hay factores fuera del rango 0,01 – 1,00.', true); return false; }
+    var pend = inc.filter(function (i) { return i.confianza < CONF_HIGH; });
+    if (pend.length && !confirm('Hay ' + pend.length + ' líneas en naranja sin confirmar (por ejemplo: "' + (pend[0].solicitado || pend[0].descripcion) +
+        '").\n\nRevíselas y pulse ✓ en cada una, o acepte para continuar de todas formas.')) return false;
     var zero = inc.filter(function (i) { return !(i.costo > 0); });
     if (zero.length) toast('Atención: ' + zero.length + ' productos tienen costo 0.', true);
     return true;
@@ -484,7 +506,8 @@
     quote.items.forEach(function (it) {
       if (it.incluir && it.codigo) {
         c.precios[it.codigo] = it.factor;
-        if (it.solicitado) aliases[Matcher.normalize(it.solicitado)] = it.codigo; // aprende la homologación
+        // aprende la homologación solo si fue confirmada (verde o ✓), para no memorizar errores
+        if (it.solicitado && it.confianza >= CONF_HIGH) aliases[Matcher.normalize(it.solicitado)] = it.codigo;
       }
     });
     Store.saveClients(clients); Store.saveAliases(aliases); refreshClientList();

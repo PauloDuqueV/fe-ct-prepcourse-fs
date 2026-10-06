@@ -8,14 +8,20 @@
   var UNIT_WORDS = 'unidades|unidad|unds|und|uds|ud|un|cajas|caja|cjs|cj|paquetes|paquete|pqts|pqt|paq|' +
     'frascos|frasco|fcos|fco|kits|kit|rollos|rollo|bolsas|bolsa|galones|galon|litros|litro|lts|lt|' +
     'pares|par|cientos|ciento|blister|tubos|tubo|sobres|sobre|cartuchos|cartucho|viales|vial|ampollas|ampolla|' +
-    'pruebas|prueba|test|pbas|pba|resmas|resma';
+    'pruebas|prueba|test|pbas|pba|resmas|resma|cajitas|cajita|tarros|tarro|gradillas|gradilla|frasquitos|frasquito|' +
+    'galoncitos|canecas|caneca|garrafas|garrafa|bultos|bulto|potes|pote|bolsitas|bolsita';
   var NUM = '(\\d+(?:[.,]\\d+)?)';
 
   var reWhatsappPrefix = /^\s*\[?\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4},?\s+\d{1,2}:\d{2}(?::\d{2})?\s*(?:[ap]\.?\s?m\.?)?\]?\s*(?:-\s*)?[^:]{1,40}:\s*/i;
   var reBullet = /^\s*(?:[-*•·▪►➢✓✔>]+|\(?[a-z]\)|\d{1,3}\s*[.)-](?!\d))\s*/i;
   var reLeadQty = new RegExp('^' + NUM + '\\s*(' + UNIT_WORDS + ')?\\.?\\s+(?:de\\s+)?(.+)$', 'i');
   var reTrailQty = new RegExp('^(.+?)[\\s,:;-]+(?:x|por|cant(?:idad)?\\.?:?|qty:?)\\s*' + NUM + '\\s*(' + UNIT_WORDS + ')?\\.?\\s*$', 'i');
-  var reTrailQtyUnit = new RegExp('^(.+?)[\\s,:;-]+' + NUM + '\\s*(' + UNIT_WORDS + ')\\.?\\s*$', 'i');
+  var FILLER = '(?:(?:ser[ií]an?|son|ser[aá]n?|necesito|necesitamos|aprox\\.?|aproximadamente|en total|total)\\s+)?';
+  var reTrailQtyUnit = new RegExp('^(.+?)[\\s,.:;-]+' + FILLER + NUM + '\\s*(' + UNIT_WORDS + ')\\.?\\s*$', 'i');
+  // "Tirillas de orina mission 3" / "Guardianes grande. 15." : número suelto al final
+  var reTrailBare = /^(.*[a-zñ)'"’.])[,.:;-]?\s+(\d{1,4})\s*\.?\s*$/i;
+  var NOT_QTY_BEFORE = /\b(talla|t|numero|n[uú]mero|no|nro|n|calibre|cal|nivel|tipo|ref|referencia|x|de|parametros|par[aá]metros|gauge|fr|french|lote)\.?$/i;
+  // "Alcohol gram 1 tarro" ya lo cubre reTrailQtyUnit; "4 gradillas de tubos lila" lo cubre reLeadQty
   var reNoise = /^(hola|buen[oa]s?\s*(dias|d[ií]as|tardes|noches)?|gracias|muchas gracias|saludos|cordial(mente)?|atentamente|feliz\s+d[ií]a|quedo atent[oa]|por favor|favor cotizar|cotizar|cotizaci[oó]n|buen d[ií]a|ok|listo|<media omitted>|<multimedia omitido>|imagen omitida|este mensaje fue eliminado)[\s.!,:]*$/i;
 
   function toNumber(s) {
@@ -41,6 +47,8 @@
       texto = m[1]; cantidad = toNumber(m[2]); unidad = (m[3] || '').toLowerCase();
     } else if ((m = line.match(reTrailQtyUnit))) {
       texto = m[1]; cantidad = toNumber(m[2]); unidad = (m[3] || '').toLowerCase();
+    } else if ((m = line.match(reTrailBare)) && !NOT_QTY_BEFORE.test(m[1].replace(/[\s.]+$/, ''))) {
+      texto = m[1]; cantidad = toNumber(m[2]);
     }
     texto = texto.replace(/[\s,;:.-]+$/, '').trim();
     if (!texto) return null;
@@ -59,11 +67,12 @@
     return lines.map(parseLine).filter(Boolean);
   }
 
-  var HEADER_DESC = /^(descripci[oó]n|producto|productos|art[ií]culo|nombre|detalle|insumo|elemento|material|concepto)\b/i;
+  var HEADER_DESC = /^(descripci[oó]n|producto|productos|art[ií]culo|nombre|detalle|insumos?|elemento|material|concepto)\b/i;
   var HEADER_DESC_WEAK = /^(item|[ií]tem|referencia|ref)\b/i;
   var HEADER_QTY = /^(cant|cantidad|cantidades|qty|unidades solicitadas|solicitado|pedido|total unidades)\b/i;
   var HEADER_UNIT = /^(unidad|u\/m|um|presentaci[oó]n|empaque|medida)\b/i;
   var HEADER_CODE = /^(c[oó]digo|cod|ref|referencia cliente|sku)\b/i;
+  var HEADER_NOTE = /^(requisito|marca|observaci|especificaci|nota|requerimiento|caracter[ií]stica|equipo)/i;
 
   /** Convierte una tabla (array de filas) en solicitudes, detectando encabezados. */
   function parseTable(rows) {
@@ -73,13 +82,14 @@
 
     var hIdx = -1, cols = null;
     for (var i = 0; i < Math.min(rows.length, 25); i++) {
-      var r = rows[i], c = { desc: -1, qty: -1, unit: -1, code: -1 };
+      var r = rows[i], c = { desc: -1, qty: -1, unit: -1, code: -1, note: -1 };
       r.forEach(function (cell, j) {
         var v = cell.toLowerCase();
         if (c.desc < 0 && HEADER_DESC.test(v)) c.desc = j;
         else if (c.qty < 0 && HEADER_QTY.test(v)) c.qty = j;
         else if (c.unit < 0 && HEADER_UNIT.test(v)) c.unit = j;
         else if (c.code < 0 && HEADER_CODE.test(v)) c.code = j;
+        else if (c.note < 0 && HEADER_NOTE.test(v)) c.note = j;
       });
       if (c.desc < 0) {
         // "Ítem" o "Referencia" solo cuentan como descripción si no hay otra columna mejor
@@ -113,10 +123,13 @@
       if (!desc || !/[a-z]{2,}/i.test(desc)) return;
       if (/^(total|subtotal|iva|observaciones)\b/i.test(desc)) return;
       var qty = cols.qty >= 0 ? toNumber(r[cols.qty]) : null;
-      var item = parseLine(desc) || { texto: desc, cantidad: 1, unidad: '' };
+      // Con columna de cantidad, la descripción se respeta completa ("TUBOS ... X100 TUBOS" es la presentación)
+      var item = qty != null ? { texto: desc.replace(/\s+/g, ' ').trim(), cantidad: 1, unidad: '' }
+        : (parseLine(desc) || { texto: desc, cantidad: 1, unidad: '' });
       if (qty != null) { item.cantidad = qty; item.cantidadDetectada = true; }
       if (cols.unit >= 0 && r[cols.unit]) item.unidad = r[cols.unit];
       if (cols.code >= 0 && r[cols.code]) item.codigoCliente = r[cols.code];
+      if (cols.note >= 0 && r[cols.note]) item.nota = r[cols.note];
       out.push(item);
     });
     return out;
@@ -215,7 +228,20 @@
     throw new Error('Formato no soportado: ' + file.name);
   }
 
+  /** "COTIZAR A CELSALUD ISTMINA", "Cliente: Hospital X", "Señores Clínica Y" -> nombre del cliente */
+  function detectClient(text) {
+    var lines = String(text || '').split(/\r?\n/).slice(0, 8);
+    for (var i = 0; i < lines.length; i++) {
+      var l = lines[i].replace(reWhatsappPrefix, '').trim();
+      var m = l.match(/^(?:favor\s+|por favor\s+)?cotiza(?:r|ci[oó]n|cion)?\s+(?:a|para|de)\s+(.{3,60}?)[\s.:,]*$/i) ||
+        l.match(/^(?:cliente|se[nñ]ores|sres\.?|raz[oó]n social|entidad|empresa)\s*[:.]?\s+(.{3,60}?)[\s.:,]*$/i);
+      if (m && !/\d{3,}/.test(m[1])) return m[1].trim();
+    }
+    return '';
+  }
+
   var api = {
+    detectClient: detectClient,
     parseLine: parseLine, parseText: parseText, parseTable: parseTable, toNumber: toNumber,
     fromFile: fromFile, readAsDataURL: readAsDataURL, readAsArrayBuffer: readAsArrayBuffer
   };

@@ -109,6 +109,7 @@ table.items tr.off td { opacity: .5; }
 table.items tr.off td:first-child, table.items tr.off td:last-child { opacity: 1; }
 .req-text { font-size: 12.5px; }
 .req-qty { font-weight: 600; }
+.req-note { font-size: 11.5px; color: var(--warn); margin-top: 3px; font-weight: 600; }
 .prod-meta { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
 .alts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .alt { font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); background: transparent; cursor: pointer; color: var(--muted); }
@@ -149,3 +150,5 @@ dialog label { margin-bottom: 8px; }
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(80px); background: #263238; color: #fff; padding: 10px 18px; border-radius: 8px; transition: .25s; z-index: 20; max-width: 90vw; }
 .toast.show { transform: translateX(-50%) translateY(0); }
 .toast.error { background: var(--danger); }
+button.ok-btn { padding: 1px 7px; color: var(--success); border-color: var(--success); background: transparent; }
+button.ok-btn:hover { background: var(--success); color: #fff; }

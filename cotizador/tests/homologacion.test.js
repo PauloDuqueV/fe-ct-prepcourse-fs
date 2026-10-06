@@ -21,6 +21,35 @@ describe('lectura de líneas', () => {
     expect(r.texto).toBe(text);
   });
 
+  test.each([
+    ['Tirillas de orina mission 3', 3, 'Tirillas de orina mission'],
+    ['Guardianes grande. 15.', 15, 'Guardianes grande'],
+    ['Agujas vacutainer para niños, 22-23G. Seria 3 cajitas', 3, 'Agujas vacutainer para niños, 22-23G'],
+    ['Alcohol gram 1 tarro', 1, 'Alcohol gram'],
+    ['4 gradillas de tubos lila', 4, 'tubos lila'],
+    ['Guantes nitrilo talla 7', 1, 'Guantes nitrilo talla 7'],
+    ['IPR-0018', 1, 'IPR-0018'],
+  ])('cantidad al final: %s', (line, qty, text) => {
+    const r = Parsers.parseLine(line);
+    expect(r.cantidad).toBe(qty);
+    expect(r.texto).toBe(text);
+  });
+
+  test('detecta el cliente en la solicitud', () => {
+    expect(Parsers.detectClient('COTIZAR A CELSALUD ISTMINA\n\nTimer\'s 3')).toBe('CELSALUD ISTMINA');
+    expect(Parsers.detectClient('Cliente: Hospital San Rafael')).toBe('Hospital San Rafael');
+    expect(Parsers.detectClient('10 cajas guantes')).toBe('');
+  });
+
+  test('tabla con columna de requisito: conserva la presentación y la marca pedida', () => {
+    const items = Parsers.parseTable([
+      ['FORMATO PARA PEDIDO DE INSUMOS'], ['RESPONSABLE: X'],
+      ['INSUMO ', 'CANTIDAD', 'REQUISITO DEL INSUMO'],
+      ['TUBOS TAPA AMARILLA GEL DE 5ML  X100 TUBOS', '8', 'BD - INPROVE'],
+    ]);
+    expect(items).toEqual([expect.objectContaining({ texto: 'TUBOS TAPA AMARILLA GEL DE 5ML X100 TUBOS', cantidad: 8, nota: 'BD - INPROVE' })]);
+  });
+
   test('ignora saludos y separa varias cantidades en una línea', () => {
     const items = Parsers.parseText('Buenos días\nfavor cotizar\n1 TGO y 1 TGP\nGracias');
     expect(items.map(i => i.texto)).toEqual(['TGO', 'TGP']);

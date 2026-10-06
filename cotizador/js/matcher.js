@@ -53,10 +53,14 @@
     galon: 'galon', galones: 'galon', isopropilico: 'isopropilico', violeta: 'violeta', genciana: 'violeta',
     puntas: 'punta', puntillas: 'punta', tips: 'punta', microtubo: 'eppendorf', eppendorf: 'eppendorf',
     guardian: 'guardian', guardianes: 'guardian', corto: 'guardian', cortopunzante: 'guardian',
+    ac: 'anticuerpo', ab: 'anticuerpo', anticuerpos: 'anticuerpo', ag: 'antigeno', antigenos: 'antigeno',
     hcg: 'embarazo', embarazo: 'embarazo', bun: 'urea', hexoquinasa: 'hk', hexokinasa: 'hk',
     cocaina: 'coc', marihuana: 'thc', cannabis: 'thc', anfetamina: 'amp', anfetaminas: 'amp', benzodiacepina: 'bzo', benzodiacepinas: 'bzo',
     morfina: 'mop', metanfetamina: 'met', metadona: 'mtd', extasis: 'mdma', opiaceos: 'opi', opiaceo: 'opi', barbituricos: 'bar'
   };
+
+  // Palabras de empaque o genéricas: ayudan poco a saber QUÉ producto es
+  var GENERIC = new Set(['anticuerpo', 'antigeno', 'prueba', 'rapida', 'caja', 'unidad', 'kit', 'frasco', 'paquete', 'tubo', 'sangre', 'total', 'desechable']);
 
   var QUALIFIERS = ['calibrador', 'multicalibrador', 'control', 'duo', 'ns1'];
 
@@ -73,13 +77,14 @@
   }
 
   function normalize(s) {
-    var t = stripAccents(s).toLowerCase();
+    var t = stripAccents(s).toLowerCase().replace(/['’]s\b/g, '');
     PHRASES.forEach(function (p) { t = t.replace(p[0], p[1]); });
     return t
       .replace(/(\d),(\d)/g, '$1.$2')          // 7,5 -> 7.5
       .replace(/(\d)\s*(ml|cc|mm|cm|g|gr|mg|l|lt|ul|µl)\b/g, '$1 $2')
       .replace(/(\d)x(\d)/g, '$1 x $2')        // 13x75 -> 13 x 75
-      .replace(/([a-z])\/(?=[a-z])/g, '$1 ')     // coc/amp/thc -> coc amp thc
+      .replace(/(^|[^0-9])\/|\/(?![0-9])/g, '$1 ') // coc/amp/thc -> coc amp thc ; conserva 1/2
+      .replace(/(\d)([a-z]{2,})/g, '$1 $2')       // 1/2ab -> 1/2 ab ; 500ml -> 500 ml
       .replace(/[^a-z0-9.%/ ]+/g, ' ')
       .replace(/\s\.|\.\s|\.$|^\./g, ' ')
       .replace(/\s+/g, ' ')
@@ -123,18 +128,20 @@
     return 0;
   }
 
+  // Distancia de edición con transposición ("alchol" -> "alcohol" = 1)
   function levenshtein(a, b) {
     if (Math.abs(a.length - b.length) > 2) return 99;
-    var prev = [], cur = [], i, j;
-    for (j = 0; j <= b.length; j++) prev[j] = j;
+    var d = [], i, j;
+    for (i = 0; i <= a.length; i++) { d[i] = [i]; }
+    for (j = 0; j <= b.length; j++) d[0][j] = j;
     for (i = 1; i <= a.length; i++) {
-      cur = [i];
       for (j = 1; j <= b.length; j++) {
-        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        var cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+        if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
       }
-      prev = cur;
     }
-    return prev[b.length];
+    return d[a.length][b.length];
   }
 
   /**
@@ -160,7 +167,7 @@
     docs.forEach(function (d) { d.tokenSet.forEach(function (t) { df[t] = (df[t] || 0) + 1; }); });
     var n = docs.length || 1;
     var idf = function (t) { return Math.log(1 + n / (1 + (df[t] || 0))); };
-    return { docs: docs, idf: idf, byCode: new Map(docs.map(function (d) { return [d.codeNorm, d]; })) };
+    return { docs: docs, idf: idf, df: df, vocab: Object.keys(df), byCode: new Map(docs.map(function (d) { return [d.codeNorm, d]; })) };
   }
 
   /**
@@ -187,6 +194,13 @@
     var qCompact = qNorm.replace(/\s/g, '');
     var qNums = qTokens.filter(isNumberToken);
     var qWords = qTokens.filter(function (t) { return !isNumberToken(t); });
+    // Palabras que no existen en el catálogo (marcas de otros proveedores, "grande", "ac"...)
+    // no ayudan a distinguir productos: pesan menos para no hundir la coincidencia.
+    var qWeight = {};
+    qWords.forEach(function (qt) {
+      var known = index.df[qt] > 0 || index.vocab.some(function (v) { return tokenSim(qt, v) >= 0.6; });
+      qWeight[qt] = index.idf(qt) * (!known ? 0.35 : GENERIC.has(qt) ? 0.4 : 1);
+    });
 
     index.docs.forEach(function (d) {
       var score = 0;
@@ -198,7 +212,7 @@
         // 3) Coincidencia ponderada por palabras
         var wSum = 0, wHit = 0;
         qWords.forEach(function (qt) {
-          var w = index.idf(qt);
+          var w = qWeight[qt];
           wSum += w;
           if (d.tokenSet.has(qt)) { wHit += w; return; }
           var best = 0;
@@ -236,11 +250,24 @@
           }
         }
 
+        // Si ninguna palabra de 3+ letras coincide (solo letras sueltas como "s" o "m"), no es este producto
+        var realHit = qWords.some(function (qt) {
+          return (qt.length >= 2 && d.tokenSet.has(qt)) || qt.length >= 3 && ( d.tokens.some(function (t) { return tokenSim(qt, t) >= 0.6; }));
+        });
+        if (qWords.length && !realHit) score *= 0.35;
         // Controles, calibradores y kits "duo" son productos distintos al reactivo: solo si se piden
 
-        var gramScore = diceSets(qGrams, d.grams);
+        // Mezcla de similitud global y de "la solicitud está contenida en la descripción"
+        var inter = 0;
+        qGrams.forEach(function (g) { if (d.grams.has(g)) inter++; });
+        var gramScore = 0.5 * diceSets(qGrams, d.grams) + 0.5 * (qGrams.size ? inter / qGrams.size : 0);
         score = 0.55 * wordScore + 0.15 * cover + 0.2 * gramScore + 0.1 * numScore;
         if (qNums.length && numScore === 0) score *= 0.8;
+        // Si ninguna palabra de 3+ letras coincide (solo letras sueltas como "s" o "m"), no es este producto
+        var realHit = qWords.some(function (qt) {
+          return (qt.length >= 2 && d.tokenSet.has(qt)) || qt.length >= 3 && ( d.tokens.some(function (t) { return tokenSim(qt, t) >= 0.6; }));
+        });
+        if (qWords.length && !realHit) score *= 0.35;
         // Controles, calibradores y kits "duo" son productos distintos al reactivo: solo si se piden
         QUALIFIERS.forEach(function (w) { if (d.tokenSet.has(w) && qWords.indexOf(w) < 0) score *= 0.85; });
       }
