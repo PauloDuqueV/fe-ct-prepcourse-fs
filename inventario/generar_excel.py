@@ -37,11 +37,13 @@ def leer_maestro(path):
     c["nom"] = c["nom"].fillna("").map(lambda x: " ".join(x.split()))
     return c.drop_duplicates("cod").set_index("cod")["nom"]
 
-def main(files, salida, maestro_path=None, listado_path=None):
+def main(files, salida, maestro_path=None, listado_paths=()):
     d, total_filas = cargar(files)
     d, L, R, nombres = analizar(d)
     maestro = leer_maestro(maestro_path)
-    listado = leer_maestro(listado_path)          # listado completo de Siigo: solo completa lo que no está en el maestro
+    # listados completos de Siigo: solo completan lo que no está en el maestro (gana el primero que lo tenga)
+    listado = pd.concat([leer_maestro(x) for x in listado_paths] or [pd.Series(dtype=str)])
+    listado = listado[~listado.index.duplicated()]
     listado = listado[(listado != "") & ~listado.index.isin(maestro.index)]
     R["En maestro"] = R.index.isin(maestro.index)
     R["En listado"] = ~R["En maestro"] & R.index.isin(listado.index)
@@ -198,7 +200,7 @@ def main(files, salida, maestro_path=None, listado_path=None):
     stats = construir_resumen(d, L, R, fis, no_fis, total_filas, files, meses, nombres)
     stats.update(maestro_n=len(maestro), maestro_path=re.sub(r"^[0-9a-f]{8}-", "", os.path.basename(maestro_path or "")), sin_mov=len(sin_mov),
                  mov_en_maestro=int(fis["En maestro"].sum()), n_listado=int(fis["En listado"].sum()),
-                 listado_path=re.sub(r"^[0-9a-f]{8}-", "", os.path.basename(listado_path or "")),
+                 listado_path=", ".join(re.sub(r"^[0-9a-f]{8}-", "", os.path.basename(x)) for x in listado_paths),
                  mov_fuera=list(fis.index[~fis["En maestro"] & ~fis["En listado"]]),
                  prov_fuera=int(sum(c in nombres.index for c in fis.index[~fis["En maestro"] & ~fis["En listado"]])),
                  filas_plantilla=len(filas_inv))
@@ -300,7 +302,8 @@ def escribir_resumen(ws, s):
           "La plantilla busca el nombre por código con una fórmula (INDEX/MATCH): si se corrige un nombre en 'Catalogo', "
           "se actualiza solo en 'Inventario' y en 'Rotacion'.")
     fila("Productos con movimiento que están en el maestro", s["mov_en_maestro"], "#,##0")
-    fila(f"Completados con el listado '{s['listado_path']}'", s["n_listado"], "#,##0")
+    fila("Completados con los listados completos de códigos Siigo", s["n_listado"], "#,##0")
+    texto(f"Listados usados: {s['listado_path']}.")
     fila("Productos con movimiento que siguen sin nombre en Siigo", len(s["mov_fuera"]), "#,##0")
     fila("   · de ellos, con nombre provisional (texto de col. Q)", s["prov_fuera"], "#,##0")
     fila("Productos del maestro sin movimiento jun–oct (al final)", s["sin_mov"], "#,##0")
@@ -370,11 +373,13 @@ def escribir_resumen(ws, s):
     ]: texto("• " + t)
 
 if __name__ == "__main__":
-    # uso: python generar_excel.py salida.xlsx [--maestro CODIGOS.xlsx] [--listado LISTADO.xlsx] informe1.xlsx informe2.xlsx ...
+    # uso: python generar_excel.py salida.xlsx [--maestro CODIGOS.xlsx] [--listado LISTADO.xlsx ...] informe1.xlsx informe2.xlsx ...
     args = sys.argv[1:]
-    salida = args.pop(0); opts = {}
-    for flag in ("--maestro", "--listado"):
-        if flag in args:
-            i = args.index(flag); opts[flag] = args[i + 1]; del args[i:i + 2]
-    st = main(args, salida, opts.get("--maestro"), opts.get("--listado"))
+    salida = args.pop(0); maestro = None; listados = []
+    while "--maestro" in args or "--listado" in args:
+        flag = "--maestro" if "--maestro" in args else "--listado"
+        i = args.index(flag); val = args[i + 1]; del args[i:i + 2]
+        if flag == "--maestro": maestro = val
+        else: listados.append(val)
+    st = main(args, salida, maestro, listados)
     print({k: v for k, v in st.items() if k not in ("top", "fmt", "mov_fuera")})
