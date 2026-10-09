@@ -7,7 +7,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.formatting.rule import FormulaRule
-from procesar_inventario import cargar, analizar
+from procesar_inventario import cargar, analizar, NO_FISICOS_PREFIJO, NO_FISICOS_CODIGO
 
 ARIAL = "Arial"
 GRIS = PatternFill("solid", fgColor="44546A")
@@ -29,9 +29,21 @@ def encabezado(ws, fila, textos, relleno=GRIS):
 def anchos(ws, w):
     for i, x in enumerate(w, 1): ws.column_dimensions[get_column_letter(i)].width = x
 
-def main(files, salida):
+def leer_maestro(path):
+    if not path: return pd.Series(dtype=str)
+    c = pd.read_excel(path, dtype=str).iloc[:, :2]
+    c.columns = ["cod", "nom"]
+    c["cod"] = c["cod"].str.strip().str.upper()
+    c["nom"] = c["nom"].fillna("").map(lambda x: " ".join(x.split()))
+    return c.drop_duplicates("cod").set_index("cod")["nom"]
+
+def main(files, salida, maestro_path=None):
     d, total_filas = cargar(files)
     d, L, R, nombres = analizar(d)
+    maestro = leer_maestro(maestro_path)
+    R["En maestro"] = R.index.isin(maestro.index)
+    sin_mov = [c for c in maestro.index if c not in R.index
+               and not (c.startswith(NO_FISICOS_PREFIJO) or c in NO_FISICOS_CODIGO)]
     meses = list(dict.fromkeys(d.sort_values("Fecha")["Mes"]))
     fis = R[R["Físico"]]
     no_fis = R[~R["Físico"]]
@@ -44,7 +56,7 @@ def main(files, salida):
     ws = wb.active; ws.title = "Inventario"
     ws["A1"] = "INVENTARIO REAL – DISTRIBUCIONES MEDITIENDA S.A.S"; ws["A1"].font = F(bold=True, size=14)
     ws["A2"] = (f"Base: informes Siigo de {meses[0].title()} a {meses[-1].title()} 2026. Productos ordenados de mayor a menor rotación. "
-                "Llene solo las celdas amarillas (Cantidad por lote) con el conteo físico de bodega. Detalle en la hoja 'Resumen'.")
+                "Al final van los productos del maestro sin movimiento en el periodo. Llene solo las celdas amarillas (Cantidad por lote) con el conteo físico de bodega. Detalle en la hoja 'Resumen'.")
     ws["A2"].font = F(italic=True, size=9); ws.merge_cells("A2:J2"); ws["A2"].alignment = IZQ; ws.row_dimensions[2].height = 28
     ws.merge_cells("A3:D3"); ws["A3"] = "PRODUCTO"
     ws.merge_cells("E3:H3"); ws["E3"] = "SEGUIMIENTO LOTE"
@@ -59,10 +71,12 @@ def main(files, salida):
     for c in range(5, 9): ws.cell(4, c).fill = TEAL
     sel = L[L["Orden"] <= 2].set_index(["Código", "Orden"])
     r = 5
-    for cod, row in fis.iterrows():
+    filas_inv = [(cod, int(row["Ranking"]), bool(row["En maestro"]) or maestro.empty) for cod, row in fis.iterrows()]
+    filas_inv += [(cod, len(R) + i, True) for i, cod in enumerate(sin_mov, 1)]
+    for cod, ranking, en_maestro in filas_inv:
         r1, r2 = r, r + 1
         for col in ("A", "B", "C", "I"): ws.merge_cells(f"{col}{r1}:{col}{r2}")
-        ws[f"A{r1}"] = int(row["Ranking"]); ws[f"B{r1}"] = cod
+        ws[f"A{r1}"] = ranking; ws[f"B{r1}"] = cod
         ws[f"C{r1}"] = f'=IF(IFERROR(INDEX(Catalogo!$B:$B,MATCH(B{r1},Catalogo!$A:$A,0)),"")="","(nombre pendiente – ver Catalogo)",INDEX(Catalogo!$B:$B,MATCH(B{r1},Catalogo!$A:$A,0)))'
         ws[f"I{r1}"] = f'=IF(COUNT(H{r1}:H{r2})=0,"",SUM(H{r1}:H{r2}))'
         for k, rr in ((1, r1), (2, r2)):
@@ -76,7 +90,8 @@ def main(files, salida):
                 if s["Notas"] and ("distint" in s["Notas"] or "inválida" in s["Notas"] or "varios lotes" in s["Notas"]):
                     obs.append("Verificar (ver hoja Lotes)")
             elif k == 1:
-                obs.append("Sin lote registrado en los informes")
+                obs.append("Sin movimiento jun–oct" if cod in sin_mov else "Sin lote registrado en los informes")
+            if k == 1 and not en_maestro: obs.insert(0, "Código no está en el maestro")
             ws[f"J{rr}"] = "; ".join(obs)
             ws[f"H{rr}"].fill = AMAR
         for rr in (r1, r2):
@@ -101,7 +116,7 @@ def main(files, salida):
     wr["A1"] = "Rotación por código (entradas = Factura de compra, salidas = Factura de venta; columna V 'Cantidad')"
     wr["A1"].font = F(bold=True, size=12)
     encabezado(wr, 3, ["Ranking", "Código", "Nombre del producto", "Entradas (unid.)", "Salidas (unid.)",
-                       "Neto entradas – salidas", "N.º compras", "N.º ventas", "Total movido (unid.)", "Lotes distintos", "En plantilla"])
+                       "Neto entradas – salidas", "N.º compras", "N.º ventas", "Total movido (unid.)", "Lotes distintos", "En plantilla", "En maestro"])
     n_lotes = L.groupby("Código").size()
     for i, (cod, row) in enumerate(R.iterrows(), start=4):
         wr.cell(i, 1, int(row["Ranking"])); wr.cell(i, 2, cod)
@@ -114,11 +129,12 @@ def main(files, salida):
         wr.cell(i, 9, f"=D{i}+E{i}")
         wr.cell(i, 10, int(n_lotes.get(cod, 0)))
         wr.cell(i, 11, "Sí" if row["Físico"] else "No (servicio/flete)")
-        for c in range(1, 12):
+        wr.cell(i, 12, "Sí" if row["En maestro"] else "No")
+        for c in range(1, 13):
             cell = wr.cell(i, c); cell.font = F(); cell.border = BORDE
             if c in (4, 5, 6, 9): cell.number_format = "#,##0.##;(#,##0.##);-"
-    anchos(wr, [9, 11, 50, 14, 14, 16, 11, 11, 16, 11, 18])
-    wr.freeze_panes = "C4"; wr.auto_filter.ref = f"A3:K{3 + len(R)}"
+    anchos(wr, [9, 11, 50, 14, 14, 16, 11, 11, 16, 11, 18, 11])
+    wr.freeze_panes = "C4"; wr.auto_filter.ref = f"A3:L{3 + len(R)}"
 
     # ======================= LOTES =======================
     wl = wb.create_sheet("Lotes")
@@ -145,12 +161,14 @@ def main(files, salida):
     wc = wb.create_sheet("Catalogo")
     wc["A1"] = "Código"; wc["B1"] = "Nombre del producto"; wc["C1"] = "Fuente del nombre"
     encabezado(wc, 1, ["Código", "Nombre del producto", "Fuente del nombre"])
-    for i, cod in enumerate(sorted(R.index), start=2):
+    for i, cod in enumerate(sorted(set(R.index) | set(maestro.index)), start=2):
         wc.cell(i, 1, cod)
-        if cod in nombres.index:
-            wc.cell(i, 2, nombres[cod]); wc.cell(i, 3, "Provisional: texto de la col. Q sin lote")
+        if cod in maestro.index and maestro[cod]:
+            wc.cell(i, 2, maestro[cod]); wc.cell(i, 3, "Maestro de productos Siigo")
+        elif cod in nombres.index:
+            wc.cell(i, 2, nombres[cod]); wc.cell(i, 3, "Provisional: no está en el maestro; texto de la col. Q sin lote")
         else:
-            wc.cell(i, 3, "Pendiente: pegar nombre desde el maestro de productos")
+            wc.cell(i, 3, "Pendiente: no está en el maestro ni hay texto en col. Q")
         wc.cell(i, 2).fill = AMAR
         for c in range(1, 4): wc.cell(i, c).font = F(); wc.cell(i, c).border = BORDE
     anchos(wc, [11, 60, 42]); wc.freeze_panes = "A2"
@@ -173,6 +191,10 @@ def main(files, salida):
 
     # ======================= RESUMEN =======================
     stats = construir_resumen(d, L, R, fis, no_fis, total_filas, files, meses, nombres)
+    stats.update(maestro_n=len(maestro), maestro_path=re.sub(r"^[0-9a-f]{8}-", "", os.path.basename(maestro_path or "")), sin_mov=len(sin_mov),
+                 mov_en_maestro=int(fis["En maestro"].sum()), mov_fuera=list(fis.index[~fis["En maestro"]]),
+                 prov_fuera=int(sum(c in nombres.index for c in fis.index[~fis["En maestro"]])),
+                 filas_plantilla=len(filas_inv))
     wsr = wb.create_sheet("Resumen", 0)
     escribir_resumen(wsr, stats)
     wb.active = 1
@@ -267,11 +289,19 @@ def escribir_resumen(ws, s):
     texto("Fuera de la plantilla, por ser servicios o fletes y no productos de bodega: " + ", ".join(s["no_fisicos"]) + ".")
     blanco()
     titulo("3. Regla 2 – Nombre del producto")
-    texto("El informe Siigo no trae el nombre del producto: su col. Q 'Nombre' se usa para lote / FV / Invima. Todavía no "
-          "llegó el archivo maestro de productos. La plantilla busca el nombre en la hoja 'Catalogo' con una fórmula "
-          "(INDEX/MATCH por código): al pegar los nombres en la columna B de 'Catalogo', se llenan solos en 'Inventario' y en 'Rotacion'.")
-    fila("Códigos con nombre provisional (texto de col. Q sin lote)", s["nombres_prov"], "#,##0")
-    fila("Códigos sin nombre (pendientes del maestro)", s["codigos"] - s["nombres_prov"], "#,##0")
+    texto(f"Los nombres salen del maestro '{s['maestro_path']}' ({s['maestro_n']:,} códigos), cargado en la hoja 'Catalogo'. "
+          "La plantilla busca el nombre por código con una fórmula (INDEX/MATCH): si se corrige un nombre en 'Catalogo', "
+          "se actualiza solo en 'Inventario' y en 'Rotacion'.")
+    fila("Productos con movimiento que están en el maestro", s["mov_en_maestro"], "#,##0")
+    fila("Productos con movimiento que NO están en el maestro", len(s["mov_fuera"]), "#,##0")
+    fila("   · de ellos, con nombre provisional (texto de col. Q)", s["prov_fuera"], "#,##0")
+    fila("Productos del maestro sin movimiento jun–oct (al final)", s["sin_mov"], "#,##0")
+    fila("Total de productos en la plantilla", s["filas_plantilla"], "#,##0")
+    texto("Los códigos con movimiento que no están en el maestro se dejaron en la plantilla, en su puesto de rotación, con la "
+          "observación 'Código no está en el maestro'. Son 1.597 líneas de factura y varios de los productos que más rotan "
+          "(p.ej. DMJ002, DMF003, LBA014). Pueden ser códigos antiguos o duplicados de otro código del maestro "
+          "(p.ej. LBA014 y DMA001 tienen el mismo nombre). Conviene revisarlos con Siigo antes del conteo.", bold=True)
+    texto("Códigos con movimiento fuera del maestro: " + ", ".join(s["mov_fuera"]) + ".")
     blanco()
     titulo("4. Regla 3 – Homologación de lote, vencimiento e Invima (col. Q)")
     texto(f"De {s['filas_prod']:,} registros de producto, {s['con_lote']:,} traen lote y {s['sin_lote']:,} no (vienen vacíos, "
@@ -327,11 +357,15 @@ def escribir_resumen(ws, s):
         "Si encuentra un lote distinto a los dos sugeridos, sobrescriba Lote / FV / Invima en esa fila o agregue una nota en 'Observación'.",
         "Hoja 'Rotacion': entradas, salidas y número de facturas por código (con fórmulas).",
         "Hoja 'Lotes': todos los lotes de cada producto, ya homologados, con el criterio de selección y las notas de lo que se corrigió.",
-        "Hoja 'Catalogo': pegue aquí los nombres del maestro de productos (columna B).",
+        "Hoja 'Catalogo': maestro de códigos y nombres; corrija aquí un nombre y se actualiza en todo el libro.",
         "Hoja 'Datos': las líneas de producto de los 5 informes, con el lote, la FV y el Invima leídos de cada una.",
     ]: texto("• " + t)
 
 if __name__ == "__main__":
-    salida = sys.argv[1]; files = sys.argv[2:]
-    st = main(files, salida)
-    print({k: v for k, v in st.items() if k not in ("top", "fmt")})
+    # uso: python generar_excel.py salida.xlsx [--maestro CODIGOS.xlsx] informe1.xlsx informe2.xlsx ...
+    args = sys.argv[1:]
+    salida = args.pop(0); maestro = None
+    if "--maestro" in args:
+        i = args.index("--maestro"); maestro = args[i + 1]; del args[i:i + 2]
+    st = main(args, salida, maestro)
+    print({k: v for k, v in st.items() if k not in ("top", "fmt", "mov_fuera")})
