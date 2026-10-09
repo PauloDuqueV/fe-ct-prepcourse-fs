@@ -37,11 +37,14 @@ def leer_maestro(path):
     c["nom"] = c["nom"].fillna("").map(lambda x: " ".join(x.split()))
     return c.drop_duplicates("cod").set_index("cod")["nom"]
 
-def main(files, salida, maestro_path=None):
+def main(files, salida, maestro_path=None, listado_path=None):
     d, total_filas = cargar(files)
     d, L, R, nombres = analizar(d)
     maestro = leer_maestro(maestro_path)
+    listado = leer_maestro(listado_path)          # listado completo de Siigo: solo completa lo que no está en el maestro
+    listado = listado[(listado != "") & ~listado.index.isin(maestro.index)]
     R["En maestro"] = R.index.isin(maestro.index)
+    R["En listado"] = ~R["En maestro"] & R.index.isin(listado.index)
     sin_mov = [c for c in maestro.index if c not in R.index
                and not (c.startswith(NO_FISICOS_PREFIJO) or c in NO_FISICOS_CODIGO)]
     meses = list(dict.fromkeys(d.sort_values("Fecha")["Mes"]))
@@ -71,7 +74,7 @@ def main(files, salida, maestro_path=None):
     for c in range(5, 9): ws.cell(4, c).fill = TEAL
     sel = L[L["Orden"] <= 2].set_index(["Código", "Orden"])
     r = 5
-    filas_inv = [(cod, int(row["Ranking"]), bool(row["En maestro"]) or maestro.empty) for cod, row in fis.iterrows()]
+    filas_inv = [(cod, int(row["Ranking"]), bool(row["En maestro"] or row["En listado"]) or maestro.empty) for cod, row in fis.iterrows()]
     filas_inv += [(cod, len(R) + i, True) for i, cod in enumerate(sin_mov, 1)]
     for cod, ranking, en_maestro in filas_inv:
         r1, r2 = r, r + 1
@@ -91,7 +94,7 @@ def main(files, salida, maestro_path=None):
                     obs.append("Verificar (ver hoja Lotes)")
             elif k == 1:
                 obs.append("Sin movimiento jun–oct" if cod in sin_mov else "Sin lote registrado en los informes")
-            if k == 1 and not en_maestro: obs.insert(0, "Código no está en el maestro")
+            if k == 1 and not en_maestro: obs.insert(0, "Código sin nombre en Siigo")
             ws[f"J{rr}"] = "; ".join(obs)
             ws[f"H{rr}"].fill = AMAR
         for rr in (r1, r2):
@@ -129,7 +132,7 @@ def main(files, salida, maestro_path=None):
         wr.cell(i, 9, f"=D{i}+E{i}")
         wr.cell(i, 10, int(n_lotes.get(cod, 0)))
         wr.cell(i, 11, "Sí" if row["Físico"] else "No (servicio/flete)")
-        wr.cell(i, 12, "Sí" if row["En maestro"] else "No")
+        wr.cell(i, 12, "Sí" if row["En maestro"] else ("Listado Siigo" if row["En listado"] else "No"))
         for c in range(1, 13):
             cell = wr.cell(i, c); cell.font = F(); cell.border = BORDE
             if c in (4, 5, 6, 9): cell.number_format = "#,##0.##;(#,##0.##);-"
@@ -165,10 +168,12 @@ def main(files, salida, maestro_path=None):
         wc.cell(i, 1, cod)
         if cod in maestro.index and maestro[cod]:
             wc.cell(i, 2, maestro[cod]); wc.cell(i, 3, "Maestro de productos Siigo")
+        elif cod in listado.index:
+            wc.cell(i, 2, listado[cod]); wc.cell(i, 3, "Listado completo de códigos Siigo (no está en el maestro)")
         elif cod in nombres.index:
-            wc.cell(i, 2, nombres[cod]); wc.cell(i, 3, "Provisional: no está en el maestro; texto de la col. Q sin lote")
+            wc.cell(i, 2, nombres[cod]); wc.cell(i, 3, "Provisional: no está en ningún listado Siigo; texto de la col. Q sin lote")
         else:
-            wc.cell(i, 3, "Pendiente: no está en el maestro ni hay texto en col. Q")
+            wc.cell(i, 3, "Pendiente: no está en ningún listado Siigo ni hay texto en col. Q")
         wc.cell(i, 2).fill = AMAR
         for c in range(1, 4): wc.cell(i, c).font = F(); wc.cell(i, c).border = BORDE
     anchos(wc, [11, 60, 42]); wc.freeze_panes = "A2"
@@ -192,8 +197,10 @@ def main(files, salida, maestro_path=None):
     # ======================= RESUMEN =======================
     stats = construir_resumen(d, L, R, fis, no_fis, total_filas, files, meses, nombres)
     stats.update(maestro_n=len(maestro), maestro_path=re.sub(r"^[0-9a-f]{8}-", "", os.path.basename(maestro_path or "")), sin_mov=len(sin_mov),
-                 mov_en_maestro=int(fis["En maestro"].sum()), mov_fuera=list(fis.index[~fis["En maestro"]]),
-                 prov_fuera=int(sum(c in nombres.index for c in fis.index[~fis["En maestro"]])),
+                 mov_en_maestro=int(fis["En maestro"].sum()), n_listado=int(fis["En listado"].sum()),
+                 listado_path=re.sub(r"^[0-9a-f]{8}-", "", os.path.basename(listado_path or "")),
+                 mov_fuera=list(fis.index[~fis["En maestro"] & ~fis["En listado"]]),
+                 prov_fuera=int(sum(c in nombres.index for c in fis.index[~fis["En maestro"] & ~fis["En listado"]])),
                  filas_plantilla=len(filas_inv))
     wsr = wb.create_sheet("Resumen", 0)
     escribir_resumen(wsr, stats)
@@ -293,15 +300,16 @@ def escribir_resumen(ws, s):
           "La plantilla busca el nombre por código con una fórmula (INDEX/MATCH): si se corrige un nombre en 'Catalogo', "
           "se actualiza solo en 'Inventario' y en 'Rotacion'.")
     fila("Productos con movimiento que están en el maestro", s["mov_en_maestro"], "#,##0")
-    fila("Productos con movimiento que NO están en el maestro", len(s["mov_fuera"]), "#,##0")
+    fila(f"Completados con el listado '{s['listado_path']}'", s["n_listado"], "#,##0")
+    fila("Productos con movimiento que siguen sin nombre en Siigo", len(s["mov_fuera"]), "#,##0")
     fila("   · de ellos, con nombre provisional (texto de col. Q)", s["prov_fuera"], "#,##0")
     fila("Productos del maestro sin movimiento jun–oct (al final)", s["sin_mov"], "#,##0")
     fila("Total de productos en la plantilla", s["filas_plantilla"], "#,##0")
-    texto("Los códigos con movimiento que no están en el maestro se dejaron en la plantilla, en su puesto de rotación, con la "
-          "observación 'Código no está en el maestro'. Son 1.597 líneas de factura y varios de los productos que más rotan "
-          "(p.ej. DMJ002, DMF003, LBA014). Pueden ser códigos antiguos o duplicados de otro código del maestro "
-          "(p.ej. LBA014 y DMA001 tienen el mismo nombre). Conviene revisarlos con Siigo antes del conteo.", bold=True)
-    texto("Códigos con movimiento fuera del maestro: " + ", ".join(s["mov_fuera"]) + ".")
+    texto("Orden de búsqueda del nombre: 1) maestro de inventario; 2) listado completo de códigos Siigo, solo para los "
+          "códigos que no están en el maestro; 3) texto de la col. Q del informe cuando trae el nombre en vez del lote. "
+          "La hoja 'Catalogo' indica la fuente de cada nombre.")
+    texto("Códigos que no aparecen en ningún listado Siigo (marcados 'Código sin nombre en Siigo' en la plantilla): "
+          + (", ".join(s["mov_fuera"]) or "ninguno") + ".", bold=True)
     blanco()
     titulo("4. Regla 3 – Homologación de lote, vencimiento e Invima (col. Q)")
     texto(f"De {s['filas_prod']:,} registros de producto, {s['con_lote']:,} traen lote y {s['sin_lote']:,} no (vienen vacíos, "
@@ -362,10 +370,11 @@ def escribir_resumen(ws, s):
     ]: texto("• " + t)
 
 if __name__ == "__main__":
-    # uso: python generar_excel.py salida.xlsx [--maestro CODIGOS.xlsx] informe1.xlsx informe2.xlsx ...
+    # uso: python generar_excel.py salida.xlsx [--maestro CODIGOS.xlsx] [--listado LISTADO.xlsx] informe1.xlsx informe2.xlsx ...
     args = sys.argv[1:]
-    salida = args.pop(0); maestro = None
-    if "--maestro" in args:
-        i = args.index("--maestro"); maestro = args[i + 1]; del args[i:i + 2]
-    st = main(args, salida, maestro)
+    salida = args.pop(0); opts = {}
+    for flag in ("--maestro", "--listado"):
+        if flag in args:
+            i = args.index(flag); opts[flag] = args[i + 1]; del args[i:i + 2]
+    st = main(args, salida, opts.get("--maestro"), opts.get("--listado"))
     print({k: v for k, v in st.items() if k not in ("top", "fmt", "mov_fuera")})
