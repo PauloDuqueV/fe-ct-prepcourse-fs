@@ -32,7 +32,7 @@
     presentaciones: (root.Rules && root.Rules.DEFAULT_PACKS) || '',
     factorDefault: 0.75,
     ivaDefault: 19,
-    redondeo: 100,
+    redondeo: 0, // 0 = precio exacto con decimales
     firmaNombre: '',
     firmaCargo: 'Asesor comercial',
     apiKey: '',

@@ -255,7 +255,7 @@ button.reg-btn { margin-top: 4px; color: var(--primary-2); border-color: var(--p
         <button id="btn-apply-sel" class="ghost">Aplicar a marcados</button>
         <label>Redondeo
           <select id="redondeo">
-            <option value="0">Sin redondeo</option>
+            <option value="0">Exacto (sin redondeo)</option>
             <option value="1">$1</option>
             <option value="10">$10</option>
             <option value="50">$50</option>
@@ -435,7 +435,7 @@ button.reg-btn { margin-top: 4px; color: var(--primary-2); border-color: var(--p
           <label>Próximo consecutivo <input id="s-consecutivo" type="number" min="1"></label>
           <label>Factor por defecto <input id="s-factor" type="number" min="0.01" max="1" step="0.01" list="dl-factores"></label>
           <label>Validez (días) <input id="s-validez" type="number" min="1"></label>
-          <label>Redondeo <select id="s-redondeo"><option value="0">Sin redondeo</option><option value="1">$1</option><option value="10">$10</option><option value="50">$50</option><option value="100">$100</option><option value="1000">$1.000</option></select></label>
+          <label>Redondeo <select id="s-redondeo"><option value="0">Exacto (sin redondeo)</option><option value="1">$1</option><option value="10">$10</option><option value="50">$50</option><option value="100">$100</option><option value="1000">$1.000</option></select></label>
           <label class="span-2">Condiciones de pago <input id="s-pago"></label>
           <label class="span-2">Tiempo de entrega <input id="s-entrega"></label>
           <label class="span-2">Notas por defecto <textarea id="s-notas" rows="2"></textarea></label>
@@ -1628,7 +1628,7 @@ window.BRAND = {
     presentaciones: (root.Rules && root.Rules.DEFAULT_PACKS) || '',
     factorDefault: 0.75,
     ivaDefault: 19,
-    redondeo: 100,
+    redondeo: 0, // 0 = precio exacto con decimales
     firmaNombre: '',
     firmaCargo: 'Asesor comercial',
     apiKey: '',
@@ -1828,7 +1828,7 @@ window.BRAND = {
 
   // ---------- Cálculo ----------
 
-  /** Precio de venta = costo / factor, redondeado hacia arriba al múltiplo indicado. */
+  /** Precio de venta = costo / factor, exacto con 2 decimales; o redondeado hacia arriba al múltiplo indicado (si se elige). */
   function precioVenta(costo, factor, redondeo) {
     costo = Number(costo) || 0;
     factor = Number(factor);
@@ -1843,8 +1843,9 @@ window.BRAND = {
   function lineCalc(it, redondeo) {
     var precio = precioVenta(it.costo, it.factor, redondeo);
     var cant = Number(it.cantidad) || 0;
-    var subtotal = precio * cant;
-    var iva = subtotal * (Number(it.iva) || 0) / 100;
+    var r2 = function (n) { return Math.round(n * 100) / 100; }; // pesos con centavos
+    var subtotal = r2(precio * cant);
+    var iva = r2(subtotal * (Number(it.iva) || 0) / 100);
     return { precio: precio, subtotal: subtotal, iva: iva, total: subtotal + iva, costoTotal: (Number(it.costo) || 0) * cant };
   }
 
@@ -1862,7 +1863,7 @@ window.BRAND = {
   function included(q) { return q.items.filter(function (it) { return it.incluir && it.codigo; }); }
   function excluded(q) { return q.items.filter(function (it) { return !(it.incluir && it.codigo); }); }
 
-  var fmtMoney = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  var fmtMoney = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 2, maximumFractionDigits: 2 });
   function money(n) { return fmtMoney.format(Number(n) || 0); }
   function fecha(iso) {
     var d = iso ? new Date(iso) : new Date();
@@ -1894,7 +1895,7 @@ window.BRAND = {
     var blue = 'FF0D3A5C', light = 'FFDDF0F4';
     var border = { top: { style: 'thin', color: { argb: 'FFB0B0B0' } }, bottom: { style: 'thin', color: { argb: 'FFB0B0B0' } },
       left: { style: 'thin', color: { argb: 'FFB0B0B0' } }, right: { style: 'thin', color: { argb: 'FFB0B0B0' } } };
-    var moneyFmt = '"$"#,##0';
+    var moneyFmt = '"$"#,##0.00';
 
     ws.columns = [{ width: 6 }, { width: 14 }, { width: 46 }, { width: 16 }, { width: 10 }, { width: 15 }, { width: 8 }, { width: 16 }, { width: 14 }, { width: 16 }];
 
@@ -1944,20 +1945,20 @@ window.BRAND = {
 
     // Hoja de cálculo interno: costo y factor editables -> precio
     calc.columns = [{ width: 6 }, { width: 14 }, { width: 46 }, { width: 14 }, { width: 10 }, { width: 15 }, { width: 11 }, { width: 15 }, { width: 50 }, { width: 22 }, { width: 10 }];
-    calc.getRow(1).values = ['Ítem', 'Código', 'Descripción', 'Costo unitario', 'Factor', 'Precio venta', 'Margen %', 'Utilidad unit.', 'Observación', 'Redondear al múltiplo de', Number(q.redondeo) || 0.01];
+    calc.getRow(1).values = ['Ítem', 'Código', 'Descripción', 'Costo unitario', 'Factor', 'Precio venta', 'Margen %', 'Utilidad unit.', 'Observación', 'Redondear al múltiplo de (0 = exacto)', Number(q.redondeo) || 0];
     calc.getRow(1).eachCell(function (c, col) {
       if (col <= 9) { c.font = { bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: blue } }; c.border = border; }
     });
     calc.getCell('J1').font = { bold: true };
     calc.getCell('K1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
-    calc.getCell('J3').value = 'Precio = REDONDEAR.MAS(Costo / Factor). Factor entre 0,01 y 1,00 (1 = precio igual al costo).';
+    calc.getCell('J3').value = 'Precio = Costo / Factor, exacto con 2 decimales (si K1 > 0, se redondea hacia arriba a ese múltiplo). Factor entre 0,01 y 1,00.';
     calc.getCell('J3').font = { italic: true, color: { argb: 'FF666666' } };
 
     items.forEach(function (it, i) {
       var r = head + 1 + i, cr = 2 + i;
       var c = lineCalc(it, q.redondeo);
       calc.getRow(cr).values = [i + 1, it.codigo, it.descripcion, Number(it.costo) || 0, Number(it.factor)];
-      calc.getCell('F' + cr).value = { formula: 'IF(AND(E' + cr + '>0,E' + cr + '<=1),CEILING(D' + cr + '/E' + cr + ',$K$1),0)', result: c.precio };
+      calc.getCell('F' + cr).value = { formula: 'IF(AND(E' + cr + '>0,E' + cr + '<=1),IF($K$1>0,CEILING(D' + cr + '/E' + cr + ',$K$1),ROUND(D' + cr + '/E' + cr + ',2)),0)', result: c.precio };
       calc.getCell('G' + cr).value = { formula: '1-E' + cr, result: 1 - it.factor };
       calc.getCell('H' + cr).value = { formula: 'F' + cr + '-D' + cr, result: c.precio - it.costo };
       calc.getCell('D' + cr).numFmt = moneyFmt; calc.getCell('F' + cr).numFmt = moneyFmt; calc.getCell('H' + cr).numFmt = moneyFmt;
@@ -1977,8 +1978,8 @@ window.BRAND = {
       row.values = [i + 1, it.codigo, it.descripcion + (it.marca ? ' - ' + it.marca : ''), it.unidad || '', Number(it.cantidad) || 0];
       ws.getCell('F' + r).value = { formula: "'Cálculo interno'!F" + cr, result: c.precio };
       ws.getCell('G' + r).value = Number(it.iva) || 0;
-      ws.getCell('H' + r).value = { formula: 'E' + r + '*F' + r, result: c.subtotal };
-      ws.getCell('I' + r).value = { formula: 'H' + r + '*G' + r + '/100', result: c.iva };
+      ws.getCell('H' + r).value = { formula: 'ROUND(E' + r + '*F' + r + ',2)', result: c.subtotal };
+      ws.getCell('I' + r).value = { formula: 'ROUND(H' + r + '*G' + r + '/100,2)', result: c.iva };
       ws.getCell('J' + r).value = { formula: 'H' + r + '+I' + r, result: c.total };
       ['F', 'H', 'I', 'J'].forEach(function (col) { ws.getCell(col + r).numFmt = moneyFmt; });
       ws.getCell('C' + r).alignment = { wrapText: true, vertical: 'top' };
@@ -2200,7 +2201,7 @@ window.BRAND = {
     ];
     products.forEach(function (p) { ws.addRow(p); });
     ws.getRow(1).font = { bold: true };
-    ws.getColumn('costo').numFmt = '#,##0';
+    ws.getColumn('costo').numFmt = '#,##0.00';
     var buf = await wb.xlsx.writeBuffer();
     download(new Blob([buf]), filename || 'catalogo.xlsx');
   }
@@ -3203,6 +3204,12 @@ window.BRAND = {
 
     // Versión entregada con el catálogo de la empresa: se carga sola la primera vez
     var seeded = loadSeedCatalog(false);
+    // Precios exactos (sin redondeo) por defecto: se aplica una vez a quienes tenían el redondeo a $100 de antes
+    if (!settings.preciosExactos) {
+      settings.redondeo = 0; settings.preciosExactos = true; Store.saveSettings(settings);
+      var d = Store.draft();
+      if (d && d.estado !== 'aprobada') { d.redondeo = 0; Store.saveDraft(d); }
+    }
     reindex(); refreshClientList(); settingsToForm();
     quote = Store.draft() || newQuote();
     setGlobalFactor(settings.factorDefault, true);

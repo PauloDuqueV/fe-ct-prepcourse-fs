@@ -987,6 +987,12 @@
 
     // Versión entregada con el catálogo de la empresa: se carga sola la primera vez
     var seeded = loadSeedCatalog(false);
+    // Precios exactos (sin redondeo) por defecto: se aplica una vez a quienes tenían el redondeo a $100 de antes
+    if (!settings.preciosExactos) {
+      settings.redondeo = 0; settings.preciosExactos = true; Store.saveSettings(settings);
+      var d = Store.draft();
+      if (d && d.estado !== 'aprobada') { d.redondeo = 0; Store.saveDraft(d); }
+    }
     reindex(); refreshClientList(); settingsToForm();
     quote = Store.draft() || newQuote();
     setGlobalFactor(settings.factorDefault, true);

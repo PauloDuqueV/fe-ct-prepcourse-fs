@@ -4,7 +4,7 @@
 
   // ---------- Cálculo ----------
 
-  /** Precio de venta = costo / factor, redondeado hacia arriba al múltiplo indicado. */
+  /** Precio de venta = costo / factor, exacto con 2 decimales; o redondeado hacia arriba al múltiplo indicado (si se elige). */
   function precioVenta(costo, factor, redondeo) {
     costo = Number(costo) || 0;
     factor = Number(factor);
@@ -19,8 +19,9 @@
   function lineCalc(it, redondeo) {
     var precio = precioVenta(it.costo, it.factor, redondeo);
     var cant = Number(it.cantidad) || 0;
-    var subtotal = precio * cant;
-    var iva = subtotal * (Number(it.iva) || 0) / 100;
+    var r2 = function (n) { return Math.round(n * 100) / 100; }; // pesos con centavos
+    var subtotal = r2(precio * cant);
+    var iva = r2(subtotal * (Number(it.iva) || 0) / 100);
     return { precio: precio, subtotal: subtotal, iva: iva, total: subtotal + iva, costoTotal: (Number(it.costo) || 0) * cant };
   }
 
@@ -38,7 +39,7 @@
   function included(q) { return q.items.filter(function (it) { return it.incluir && it.codigo; }); }
   function excluded(q) { return q.items.filter(function (it) { return !(it.incluir && it.codigo); }); }
 
-  var fmtMoney = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  var fmtMoney = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 2, maximumFractionDigits: 2 });
   function money(n) { return fmtMoney.format(Number(n) || 0); }
   function fecha(iso) {
     var d = iso ? new Date(iso) : new Date();
@@ -70,7 +71,7 @@
     var blue = 'FF0D3A5C', light = 'FFDDF0F4';
     var border = { top: { style: 'thin', color: { argb: 'FFB0B0B0' } }, bottom: { style: 'thin', color: { argb: 'FFB0B0B0' } },
       left: { style: 'thin', color: { argb: 'FFB0B0B0' } }, right: { style: 'thin', color: { argb: 'FFB0B0B0' } } };
-    var moneyFmt = '"$"#,##0';
+    var moneyFmt = '"$"#,##0.00';
 
     ws.columns = [{ width: 6 }, { width: 14 }, { width: 46 }, { width: 16 }, { width: 10 }, { width: 15 }, { width: 8 }, { width: 16 }, { width: 14 }, { width: 16 }];
 
@@ -120,20 +121,20 @@
 
     // Hoja de cálculo interno: costo y factor editables -> precio
     calc.columns = [{ width: 6 }, { width: 14 }, { width: 46 }, { width: 14 }, { width: 10 }, { width: 15 }, { width: 11 }, { width: 15 }, { width: 50 }, { width: 22 }, { width: 10 }];
-    calc.getRow(1).values = ['Ítem', 'Código', 'Descripción', 'Costo unitario', 'Factor', 'Precio venta', 'Margen %', 'Utilidad unit.', 'Observación', 'Redondear al múltiplo de', Number(q.redondeo) || 0.01];
+    calc.getRow(1).values = ['Ítem', 'Código', 'Descripción', 'Costo unitario', 'Factor', 'Precio venta', 'Margen %', 'Utilidad unit.', 'Observación', 'Redondear al múltiplo de (0 = exacto)', Number(q.redondeo) || 0];
     calc.getRow(1).eachCell(function (c, col) {
       if (col <= 9) { c.font = { bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: blue } }; c.border = border; }
     });
     calc.getCell('J1').font = { bold: true };
     calc.getCell('K1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
-    calc.getCell('J3').value = 'Precio = REDONDEAR.MAS(Costo / Factor). Factor entre 0,01 y 1,00 (1 = precio igual al costo).';
+    calc.getCell('J3').value = 'Precio = Costo / Factor, exacto con 2 decimales (si K1 > 0, se redondea hacia arriba a ese múltiplo). Factor entre 0,01 y 1,00.';
     calc.getCell('J3').font = { italic: true, color: { argb: 'FF666666' } };
 
     items.forEach(function (it, i) {
       var r = head + 1 + i, cr = 2 + i;
       var c = lineCalc(it, q.redondeo);
       calc.getRow(cr).values = [i + 1, it.codigo, it.descripcion, Number(it.costo) || 0, Number(it.factor)];
-      calc.getCell('F' + cr).value = { formula: 'IF(AND(E' + cr + '>0,E' + cr + '<=1),CEILING(D' + cr + '/E' + cr + ',$K$1),0)', result: c.precio };
+      calc.getCell('F' + cr).value = { formula: 'IF(AND(E' + cr + '>0,E' + cr + '<=1),IF($K$1>0,CEILING(D' + cr + '/E' + cr + ',$K$1),ROUND(D' + cr + '/E' + cr + ',2)),0)', result: c.precio };
       calc.getCell('G' + cr).value = { formula: '1-E' + cr, result: 1 - it.factor };
       calc.getCell('H' + cr).value = { formula: 'F' + cr + '-D' + cr, result: c.precio - it.costo };
       calc.getCell('D' + cr).numFmt = moneyFmt; calc.getCell('F' + cr).numFmt = moneyFmt; calc.getCell('H' + cr).numFmt = moneyFmt;
@@ -153,8 +154,8 @@
       row.values = [i + 1, it.codigo, it.descripcion + (it.marca ? ' - ' + it.marca : ''), it.unidad || '', Number(it.cantidad) || 0];
       ws.getCell('F' + r).value = { formula: "'Cálculo interno'!F" + cr, result: c.precio };
       ws.getCell('G' + r).value = Number(it.iva) || 0;
-      ws.getCell('H' + r).value = { formula: 'E' + r + '*F' + r, result: c.subtotal };
-      ws.getCell('I' + r).value = { formula: 'H' + r + '*G' + r + '/100', result: c.iva };
+      ws.getCell('H' + r).value = { formula: 'ROUND(E' + r + '*F' + r + ',2)', result: c.subtotal };
+      ws.getCell('I' + r).value = { formula: 'ROUND(H' + r + '*G' + r + '/100,2)', result: c.iva };
       ws.getCell('J' + r).value = { formula: 'H' + r + '+I' + r, result: c.total };
       ['F', 'H', 'I', 'J'].forEach(function (col) { ws.getCell(col + r).numFmt = moneyFmt; });
       ws.getCell('C' + r).alignment = { wrapText: true, vertical: 'top' };
@@ -376,7 +377,7 @@
     ];
     products.forEach(function (p) { ws.addRow(p); });
     ws.getRow(1).font = { bold: true };
-    ws.getColumn('costo').numFmt = '#,##0';
+    ws.getColumn('costo').numFmt = '#,##0.00';
     var buf = await wb.xlsx.writeBuffer();
     download(new Blob([buf]), filename || 'catalogo.xlsx');
   }
