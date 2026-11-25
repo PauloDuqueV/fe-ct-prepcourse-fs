@@ -4,6 +4,16 @@
  * Instalación: ver INSTALACION.md
  */
 
+// ID de la hoja de Google Sheets donde se guardan los datos (está en su link: /spreadsheets/d/ESTE_ID/edit).
+// Si se deja vacío, usa la hoja desde la que se abrió Apps Script (Extensiones → Apps Script).
+const HOJA_ID = '17mdK5uWiGqWI0fKet2qiO2QyPQhZp2SN6DWsEZgsphU';
+let LIBRO_ = null;
+function libro_() {
+  if (!LIBRO_) LIBRO_ = HOJA_ID ? SpreadsheetApp.openById(HOJA_ID) : SpreadsheetApp.getActiveSpreadsheet();
+  if (!LIBRO_) throw new Error('No se encontró la hoja de cálculo. Revisa HOJA_ID en Código.gs.');
+  return LIBRO_;
+}
+
 const HOJAS = {
   Config: ['clave', 'valor', 'nota'],
   Zonas: ['id', 'nombre', 'mensajero', 'medio', 'punto', 'embarque', 'activa', 'orden'],
@@ -35,7 +45,7 @@ function doGet() {
 /* Instalación: ejecutar UNA vez desde el editor                       */
 /* ------------------------------------------------------------------ */
 function instalar() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss = libro_();
   Object.keys(HOJAS).forEach(function (nombre) {
     let sh = ss.getSheetByName(nombre);
     if (!sh) sh = ss.insertSheet(nombre);
@@ -71,7 +81,7 @@ function instalar() {
      ['tado-hospital', 'Hospital de Tadó', 'Tadó'], ['condoto-mi-salud', 'Unidad Médica Mi Salud', 'Condoto']]
       .forEach(function (c) { agregar_('Clientes', { id: c[0], nombre: c[1], municipio: c[2], zonaId: 'san-juan', modalidad: 'efectivo', activo: true }); });
   }
-  SpreadsheetApp.getUi && SpreadsheetApp.flush();
+  SpreadsheetApp.flush();
   return 'Instalación completa';
 }
 
@@ -239,7 +249,7 @@ function datos_(fecha) {
 }
 
 function hoja_(nombre) {
-  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nombre);
+  const sh = libro_().getSheetByName(nombre);
   if (!sh) throw new Error('Falta la hoja "' + nombre + '". Ejecuta instalar() en el editor de Apps Script.');
   return sh;
 }
